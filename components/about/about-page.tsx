@@ -26,13 +26,13 @@ const FEATURES = [
   },
   {
     icon: CoinsIcon,
-    title: "Any coin on Binance",
-    body: "BTC, ETH, SOL and hundreds more. Every coin with a USDT pair on Binance is priced live.",
+    title: "Any coin, your currency",
+    body: "BTC, ETH, SOL and hundreds more: every coin with a USDT pair on Binance, priced live. Enter trades in USD, SGD, MYR, IDR, THB, PHP, VND, HKD, JPY, KRW, CNY, TWD or INR.",
   },
   {
     icon: FileSpreadsheetIcon,
     title: "Import from Binance",
-    body: "Upload your Binance trade history CSV, preview every row, then save. Export anytime.",
+    body: "Upload your Binance trade history CSV (USDT, USDC and other USD-stablecoin pairs) or our template, preview every row, then save. Export anytime.",
   },
   {
     icon: SmartphoneIcon,
@@ -42,7 +42,7 @@ const FEATURES = [
   {
     icon: LockIcon,
     title: "Your ledger is yours",
-    body: "Each account has its own private ledger. Nobody else can see or change your trades.",
+    body: "Each account has its own private ledger. Other users can't see or change your trades.",
   },
 ];
 

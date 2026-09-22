@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 
 export default async function About() {
   const viewer = await getViewer();
-  const signedIn = viewer.status === "owner" || viewer.status === "bypassed";
+  // "forbidden" is signed in but not yet on the allowlist: "/" shows them their ID to send.
+  const signedIn = viewer.status === "owner" || viewer.status === "bypassed" || viewer.status === "forbidden";
   return <AboutPage signedIn={signedIn} inviteOnly={allowedUserIds().length > 0} />;
 }
