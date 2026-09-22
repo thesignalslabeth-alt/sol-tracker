@@ -1,5 +1,6 @@
 create table if not exists trades (
   id               text primary key,
+  user_id          text not null,
   date             date not null,
   side             text not null check (side in ('buy', 'sell')),
   sol_amount       numeric(20, 8) not null check (sol_amount > 0),
@@ -11,3 +12,5 @@ create table if not exists trades (
   note             text,
   created_at       timestamptz not null default now()
 );
+
+create index if not exists trades_user_id_idx on trades (user_id);

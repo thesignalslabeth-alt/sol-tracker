@@ -26,7 +26,7 @@ export default async function Page() {
     );
   }
 
-  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list()]);
+  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list(viewer.userId)]);
 
   let position;
   try {

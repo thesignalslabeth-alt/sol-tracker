@@ -8,10 +8,10 @@ import { getTradesRepo } from "@/lib/trades-repo";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-async function run(fn: () => Promise<void>): Promise<ActionResult> {
+async function run(fn: (userId: string) => Promise<void>): Promise<ActionResult> {
   try {
-    await requireOwner();
-    await fn();
+    const userId = await requireOwner();
+    await fn(userId);
     revalidatePath("/");
     return { ok: true };
   } catch (e) {
@@ -37,32 +37,32 @@ function assertValidLedger(trades: Trade[]) {
 }
 
 export async function createTrade(input: unknown): Promise<ActionResult> {
-  return run(async () => {
+  return run(async (userId) => {
     const data = parse(input);
     const repo = await getTradesRepo();
     const trade: Trade = { ...data, id: crypto.randomUUID(), created_at: new Date().toISOString() };
-    assertValidLedger([...(await repo.list()), trade]);
-    await repo.create(trade);
+    assertValidLedger([...(await repo.list(userId)), trade]);
+    await repo.create(userId, trade);
   });
 }
 
 export async function updateTrade(id: string, input: unknown): Promise<ActionResult> {
-  return run(async () => {
+  return run(async (userId) => {
     const data = parse(input);
     const repo = await getTradesRepo();
-    const trades = await repo.list();
+    const trades = await repo.list(userId);
     const existing = trades.find((t) => t.id === id);
     if (!existing) throw new InputError("That trade no longer exists.");
     const trade: Trade = { ...existing, ...data };
     assertValidLedger(trades.map((t) => (t.id === id ? trade : t)));
-    await repo.update(trade);
+    await repo.update(userId, trade);
   });
 }
 
 export async function deleteTrade(id: string): Promise<ActionResult> {
-  return run(async () => {
+  return run(async (userId) => {
     const repo = await getTradesRepo();
-    const trades = await repo.list();
+    const trades = await repo.list(userId);
     try {
       assertValidLedger(trades.filter((t) => t.id !== id));
     } catch (e) {
@@ -71,6 +71,6 @@ export async function deleteTrade(id: string): Promise<ActionResult> {
       }
       throw e;
     }
-    await repo.remove(id);
+    await repo.remove(userId, id);
   });
 }

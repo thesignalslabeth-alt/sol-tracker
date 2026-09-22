@@ -1,6 +1,6 @@
 # SOL Tracker
 
-Personal, single-user dashboard for a SOL spot position: moving-average cost basis,
+Personal dashboard for a SOL spot position: moving-average cost basis,
 realized and unrealized P/L, portfolio value and break-even price, with a live price
 from CoinGecko. Mobile-first; trades are logged in the app.
 
@@ -40,7 +40,8 @@ Tap **Add trade** (bottom of the screen on mobile, top right on desktop):
    match your actual fill. Example: sold 33 SOL for S$4,270 at 0.786782 → $3,359.56.
 4. Check the preview ("Avg cost $72.47 → $77.98", or "Realizes +$660.66"), then save.
 
-Every add, edit and delete re-checks the whole ledger, so a sell can never end up larger
+Each signed-in user has their own ledger: a new user starts empty and can never see
+anyone else's trades. Every add, edit and delete re-checks the whole ledger, so a sell can never end up larger
 than what you held at that date.
 
 **How cost basis works:** moving average cost. A buy re-averages your cost; a sell
@@ -50,12 +51,13 @@ removes SOL at the current average and leaves the average unchanged.
 
 1. Create an application in the Clerk dashboard and copy its keys into `.env.local`
    (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`).
-2. Restart `npm run dev` and sign in. You'll see **Not authorized** with your user ID.
-3. Put that ID in `ALLOWED_USER_IDS` and restart.
-4. In Clerk, turn off sign-ups (Restrictions) so nobody else can create an account.
+2. Optional: restrict who can use the app with `ALLOWED_USER_IDS` (comma-separated).
+   Leave it empty to let anyone who signs in use it with their own empty ledger.
+   Someone who isn't on a non-empty list sees **Not authorized** with their user ID.
+3. Set `SEED_USER_ID` to your ID so the committed seed trades show up as yours locally.
 
-Access is checked twice: in `proxy.ts` and again in every server action and API route
-(`requireOwner()` in `lib/auth.ts`).
+Every server action and API route calls `requireOwner()` (`lib/auth.ts`), which returns
+the signed-in user's ID; all storage calls are scoped by it.
 
 ## Deploying to Vercel
 
@@ -63,9 +65,10 @@ Vercel's filesystem is read-only, so production uses Postgres:
 
 1. Add **Neon** from the Vercel Marketplace; it sets `DATABASE_URL`.
 2. Set `TRADES_STORE=postgres`, the Clerk keys and `ALLOWED_USER_IDS` in the project's env vars.
-3. Create the table and load the seed data once:
+3. Create the table and load the seed data once (safe to re-run; it also migrates
+   older tables to per-user rows):
    ```bash
-   DATABASE_URL="postgres://..." npm run db:seed
+   DATABASE_URL="postgres://..." SEED_USER_ID="user_..." npm run db:seed
    ```
 4. Before deploying, check `vercel whoami` shows the right team, and that commits are
    authored by the account that's a member of it.

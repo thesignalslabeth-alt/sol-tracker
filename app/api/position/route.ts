@@ -5,14 +5,15 @@ import { getSolPrice } from "@/lib/price";
 import { getTradesRepo } from "@/lib/trades-repo";
 
 export async function GET() {
+  let userId: string;
   try {
-    await requireOwner();
+    userId = await requireOwner();
   } catch (e) {
     if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
   }
 
-  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list()]);
+  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list(userId)]);
   return NextResponse.json({
     trades,
     position: calculatePosition(trades, price.usd ?? 0),

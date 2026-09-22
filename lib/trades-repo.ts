@@ -1,12 +1,15 @@
 import "server-only";
 import type { Trade } from "./trade-schema";
 
-/** Storage boundary. The UI and position math never touch storage directly. */
+/**
+ * Storage boundary. The UI and position math never touch storage directly.
+ * Every method is scoped to one user: a user can only see or change their own trades.
+ */
 export interface TradesRepo {
-  list(): Promise<Trade[]>;
-  create(trade: Trade): Promise<void>;
-  update(trade: Trade): Promise<void>;
-  remove(id: string): Promise<void>;
+  list(userId: string): Promise<Trade[]>;
+  create(userId: string, trade: Trade): Promise<void>;
+  update(userId: string, trade: Trade): Promise<void>;
+  remove(userId: string, id: string): Promise<void>;
 }
 
 let repo: TradesRepo | null = null;
