@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "db:seed": "node --import tsx scripts/db-seed.mts",
-    "dev:lan": "next dev"
+    "dev:lan": "next dev",
+    "db:migrate-users": "node --import tsx scripts/migrate-user-ids.mts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.4",
