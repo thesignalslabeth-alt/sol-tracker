@@ -23,12 +23,12 @@ export function Glyph({ size }: { size: number }) {
         justifyContent: "center",
         background: "linear-gradient(135deg, #9945ff 0%, #14f195 100%)",
         color: "white",
-        fontSize: size * 0.34,
+        fontSize: size * 0.42,
         fontWeight: 700,
         letterSpacing: -size * 0.01,
       }}
     >
-      SOL
+      TT
     </div>
   );
 }

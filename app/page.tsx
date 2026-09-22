@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { AboutPage } from "@/components/about/about-page";
 import { Dashboard } from "@/components/dashboard/dashboard";
 import { NoticeScreen } from "@/components/dashboard/notice-screen";
 import { getViewer } from "@/lib/auth";
-import { clerkConfigured } from "@/lib/auth-config";
+import { allowedUserIds, clerkConfigured } from "@/lib/auth-config";
 import { OversellError, positionsByAsset } from "@/lib/position";
 import { getPrices } from "@/lib/price";
 import { getTradesRepo } from "@/lib/trades-repo";
@@ -12,7 +12,8 @@ export default async function Page({ searchParams }: PageProps<"/">) {
   await connection(); // always render per request: live prices + mutable trades
 
   const viewer = await getViewer();
-  if (viewer.status === "signed-out") redirect("/sign-in");
+  // Signed-out visitors get the public About page instead of a bare sign-in form.
+  if (viewer.status === "signed-out") return <AboutPage signedIn={false} inviteOnly={allowedUserIds().length > 0} />;
   if (viewer.status === "misconfigured") {
     return <NoticeScreen title="Authentication isn't configured">Set the Clerk environment variables.</NoticeScreen>;
   }

@@ -13,6 +13,7 @@ import { fmtPrice, fmtQty, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass, todaySg 
 import { maxSellable, previewTrade } from "@/lib/position";
 import type { Prices } from "@/lib/price";
 import { tradeInputSchema, type Trade, type TradeInput } from "@/lib/trade-schema";
+import { AssetPicker } from "./asset-picker";
 import { Segmented } from "./segmented";
 
 type FormValues = {
@@ -22,7 +23,7 @@ type FormValues = {
   quantity: string;
   currency: "USD" | "SGD";
   mode: "total" | "price";
-  amount: string; // total or price per SOL, in `currency`
+  amount: string; // total or price per unit, in `currency`
   fx: string; // USD per SGD
   fee: string; // in `currency`
   note: string;
@@ -115,6 +116,8 @@ export function TradeForm({
   const asset = input.asset;
   const assetKnown = knownAssets.length === 0 || knownAssets.includes(asset);
   const livePrice = prices.usd[asset] ?? 0;
+  // Assets this user already trades, most recent first, for the picker's shortlist.
+  const heldAssets = [...new Set([...trades].sort((a, b) => b.date.localeCompare(a.date)).map((t) => t.asset))];
 
   // Cheap enough to recompute every render: the ledger is small.
   const preview =
@@ -172,29 +175,22 @@ export function TradeForm({
       />
 
       <div className="space-y-1.5">
-        <Label htmlFor="asset">Asset</Label>
-        <Input
-          id="asset"
-          list="binance-assets"
-          placeholder="SOL, BTC, ETH…"
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-          className="h-11 text-base uppercase"
-          {...reg("asset")}
-          aria-invalid={!!err("asset") || !assetKnown}
+        <Label>Asset</Label>
+        <AssetPicker
+          value={asset}
+          onChange={(sym) => {
+            setValue("asset", sym);
+            clearErrors("asset");
+          }}
+          knownAssets={knownAssets}
+          heldAssets={heldAssets}
+          prices={prices.usd}
+          invalid={!!err("asset") || !assetKnown}
         />
-        <datalist id="binance-assets">
-          {knownAssets.map((a) => (
-            <option key={a} value={a} />
-          ))}
-        </datalist>
         {err("asset") ? (
           <p className="text-xs text-loss">{err("asset")}</p>
         ) : asset && !assetKnown ? (
           <p className="text-xs text-loss">{asset} has no USDT pair on Binance.</p>
-        ) : livePrice > 0 ? (
-          <p className="text-xs tabular-nums text-muted-foreground">Live: {fmtPrice(livePrice)}</p>
         ) : null}
       </div>
 
@@ -234,7 +230,7 @@ export function TradeForm({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="amount">
-            {v.mode === "total" ? (v.side === "buy" ? "Total paid" : "Total received") : "Price per SOL"} ({v.currency})
+            {v.mode === "total" ? (v.side === "buy" ? "Total paid" : "Total received") : `Price per ${asset || "coin"}`} ({v.currency})
           </Label>
           <Segmented
             label="Entry mode"
@@ -249,7 +245,7 @@ export function TradeForm({
             }}
             options={[
               { value: "total", label: "Total" },
-              { value: "price", label: "Per SOL" },
+              { value: "price", label: "Per coin" },
             ]}
           />
         </div>
@@ -263,7 +259,7 @@ export function TradeForm({
           hasAmounts && (
             <p className="text-xs tabular-nums text-muted-foreground">
               {v.mode === "total"
-                ? `= ${cur}${round(quoteTotal / sol, 4).toLocaleString("en-US")} per SOL`
+                ? `= ${cur}${round(quoteTotal / sol, 4).toLocaleString("en-US")} per ${asset}`
                 : `= ${cur}${round(quoteTotal, 2).toLocaleString("en-US")} total`}
               {" · net of fees"}
             </p>
