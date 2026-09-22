@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { InstallGuide } from "./install-guide";
 
 const FEATURES = [
   {
@@ -159,6 +160,20 @@ export function AboutPage({ signedIn, inviteOnly }: { signedIn: boolean; inviteO
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* Install */}
+        <section id="install" aria-labelledby="install-title" className="scroll-mt-20 space-y-4 py-8">
+          <div className="space-y-1">
+            <h2 id="install-title" className="text-xl font-semibold md:text-2xl">
+              Add it to your home screen
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Open Trade Tracker from an icon like any other app: full screen, no browser bars. Nothing to download from
+              an app store.
+            </p>
+          </div>
+          <InstallGuide />
         </section>
 
         {/* Safety */}
