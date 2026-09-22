@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Too
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fmtSignedUsd, fmtUsd } from "@/lib/format";
 import type { Position } from "@/lib/position";
-import { ChartTooltip } from "./sol-allocation-chart";
+import { ChartTooltip } from "./donut-card";
 
 type Step = { name: string; base: number; size: number; color: string; label: string; detail: string };
 

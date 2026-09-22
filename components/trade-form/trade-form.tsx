@@ -9,16 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { fmtSignedPct, fmtSignedUsd, fmtSol, fmtUsd, plClass, todaySg } from "@/lib/format";
+import { fmtPrice, fmtQty, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass, todaySg } from "@/lib/format";
 import { maxSellable, previewTrade } from "@/lib/position";
-import type { SolPrice } from "@/lib/price";
+import type { Prices } from "@/lib/price";
 import { tradeInputSchema, type Trade, type TradeInput } from "@/lib/trade-schema";
 import { Segmented } from "./segmented";
 
 type FormValues = {
   side: "buy" | "sell";
+  asset: string;
   date: string;
-  sol_amount: string;
+  quantity: string;
   currency: "USD" | "SGD";
   mode: "total" | "price";
   amount: string; // total or price per SOL, in `currency`
@@ -33,15 +34,16 @@ const num = (s: string) => (s.trim() === "" ? Number.NaN : Number(s.replace(/,/g
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
 
 function toInput(v: FormValues): TradeInput {
-  const sol = num(v.sol_amount);
+  const sol = num(v.quantity);
   const amount = num(v.amount);
   const fx = v.currency === "SGD" ? num(v.fx) : 1;
   const quoteTotal = v.mode === "total" ? amount : amount * sol;
   const fee = v.fee.trim() === "" ? 0 : num(v.fee);
   return {
     date: v.date,
+    asset: v.asset.trim().toUpperCase(),
     side: v.side,
-    sol_amount: sol,
+    quantity: sol,
     total_usd: round(quoteTotal * fx, 6),
     fee_usd: round(fee * fx, 6),
     quote_currency: v.currency,
@@ -54,7 +56,8 @@ function toInput(v: FormValues): TradeInput {
 // Maps schema paths onto the form field that produced them.
 const FIELD_FOR: Record<string, Field> = {
   date: "date",
-  sol_amount: "sol_amount",
+  asset: "asset",
+  quantity: "quantity",
   total_usd: "amount",
   quote_amount: "amount",
   fx_usd_per_quote: "fx",
@@ -62,17 +65,18 @@ const FIELD_FOR: Record<string, Field> = {
   note: "note",
 };
 
-function defaults(editing: Trade | null, price: SolPrice): FormValues {
-  const liveFx = price.usd && price.sgd ? String(round(price.usd / price.sgd, 6)) : "";
+function defaults(editing: Trade | null, defaultAsset: string, prices: Prices): FormValues {
+  const liveFx = prices.usdPerSgd ? String(round(prices.usdPerSgd, 6)) : "";
   if (!editing) {
-    return { side: "buy", date: todaySg(), sol_amount: "", currency: "USD", mode: "total", amount: "", fx: liveFx, fee: "", note: "" };
+    return { side: "buy", asset: defaultAsset, date: todaySg(), quantity: "", currency: "USD", mode: "total", amount: "", fx: liveFx, fee: "", note: "" };
   }
   const sgd = editing.quote_currency === "SGD";
   const fx = sgd ? (editing.fx_usd_per_quote ?? 1) : 1;
   return {
     side: editing.side,
+    asset: editing.asset,
     date: editing.date,
-    sol_amount: String(editing.sol_amount),
+    quantity: String(editing.quantity),
     currency: editing.quote_currency,
     mode: "total",
     amount: String(sgd ? (editing.quote_amount ?? editing.total_usd / fx) : editing.total_usd),
@@ -84,42 +88,49 @@ function defaults(editing: Trade | null, price: SolPrice): FormValues {
 
 export function TradeForm({
   editing,
+  defaultAsset,
   trades,
-  price,
+  prices,
+  knownAssets,
   onDone,
 }: {
   editing: Trade | null;
+  defaultAsset: string;
   trades: Trade[];
-  price: SolPrice;
+  prices: Prices;
+  knownAssets: string[];
   onDone: () => void;
 }) {
   const { register, control, setValue, handleSubmit, setError, clearErrors, formState } = useForm<FormValues>({
-    defaultValues: defaults(editing, price),
+    defaultValues: defaults(editing, defaultAsset, prices),
   });
   const [saving, startSaving] = useTransition();
   const [draftCreatedAt] = useState(() => new Date().toISOString());
   const v = useWatch({ control }) as FormValues;
   const cur = v.currency === "SGD" ? "S$" : "$";
   const input = toInput(v);
-  const sol = input.sol_amount;
+  const sol = input.quantity;
   const quoteTotal = v.currency === "SGD" ? input.quote_amount! : input.total_usd;
   const hasAmounts = sol > 0 && input.total_usd > 0;
+  const asset = input.asset;
+  const assetKnown = knownAssets.length === 0 || knownAssets.includes(asset);
+  const livePrice = prices.usd[asset] ?? 0;
 
   // Cheap enough to recompute every render: the ledger is small.
   const preview =
-    hasAmounts && v.date
+    hasAmounts && v.date && asset
       ? previewTrade(
           trades,
           { ...input, id: editing?.id ?? "__draft__", created_at: editing?.created_at ?? draftCreatedAt },
-          price.usd ?? 0,
+          livePrice,
           editing?.id,
         )
       : null;
 
   const setMax = () => {
-    const max = maxSellable(trades, v.date, editing?.id);
-    setValue("sol_amount", String(round(max, 8)), { shouldValidate: false });
-    clearErrors("sol_amount");
+    const max = maxSellable(trades, asset, v.date, editing?.id);
+    setValue("quantity", String(round(max, 8)), { shouldValidate: false });
+    clearErrors("quantity");
   };
 
   const onSubmit = handleSubmit((values) => {
@@ -160,6 +171,33 @@ export function TradeForm({
         ]}
       />
 
+      <div className="space-y-1.5">
+        <Label htmlFor="asset">Asset</Label>
+        <Input
+          id="asset"
+          list="binance-assets"
+          placeholder="SOL, BTC, ETH…"
+          autoCapitalize="characters"
+          autoComplete="off"
+          spellCheck={false}
+          className="h-11 text-base uppercase"
+          {...reg("asset")}
+          aria-invalid={!!err("asset") || !assetKnown}
+        />
+        <datalist id="binance-assets">
+          {knownAssets.map((a) => (
+            <option key={a} value={a} />
+          ))}
+        </datalist>
+        {err("asset") ? (
+          <p className="text-xs text-loss">{err("asset")}</p>
+        ) : asset && !assetKnown ? (
+          <p className="text-xs text-loss">{asset} has no USDT pair on Binance.</p>
+        ) : livePrice > 0 ? (
+          <p className="text-xs tabular-nums text-muted-foreground">Live: {fmtPrice(livePrice)}</p>
+        ) : null}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="date">Date</Label>
@@ -182,15 +220,15 @@ export function TradeForm({
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="sol_amount">SOL amount</Label>
+          <Label htmlFor="quantity">{asset || "Asset"} amount</Label>
           {v.side === "sell" && (
             <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={setMax}>
-              Max ({fmtSol(maxSellable(trades, v.date, editing?.id))})
+              Max ({fmtQty(maxSellable(trades, asset, v.date, editing?.id), asset)})
             </Button>
           )}
         </div>
-        <Input id="sol_amount" placeholder="0.00" {...decimal} {...reg("sol_amount")} aria-invalid={!!err("sol_amount")} />
-        {err("sol_amount") && <p className="text-xs text-loss">{err("sol_amount")}</p>}
+        <Input id="quantity" placeholder="0.00" {...decimal} {...reg("quantity")} aria-invalid={!!err("quantity")} />
+        {err("quantity") && <p className="text-xs text-loss">{err("quantity")}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -259,11 +297,11 @@ export function TradeForm({
         </div>
       </div>
 
-      <Preview preview={preview} side={v.side} />
+      <Preview preview={preview} side={v.side} asset={asset} />
 
       <Button
         type="submit"
-        disabled={saving || (preview != null && !preview.ok)}
+        disabled={saving || !assetKnown || (preview != null && !preview.ok)}
         className={cn("h-12 w-full text-base text-white", v.side === "buy" ? "bg-gain hover:bg-gain/90" : "bg-loss hover:bg-loss/90")}
       >
         {saving ? "Saving…" : editing ? "Save changes" : v.side === "buy" ? "Save buy" : "Save sell"}
@@ -272,7 +310,15 @@ export function TradeForm({
   );
 }
 
-function Preview({ preview, side }: { preview: ReturnType<typeof previewTrade> | null; side: "buy" | "sell" }) {
+function Preview({
+  preview,
+  side,
+  asset,
+}: {
+  preview: ReturnType<typeof previewTrade> | null;
+  side: "buy" | "sell";
+  asset: string;
+}) {
   if (!preview) {
     return <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">Enter an amount to preview the impact.</div>;
   }
@@ -293,16 +339,16 @@ function Preview({ preview, side }: { preview: ReturnType<typeof previewTrade> |
             <span className={cn("font-semibold", plClass(sale.realizedPL))}>
               {fmtSignedUsd(sale.realizedPL)} ({fmtSignedPct(sale.realizedPct)})
             </span>{" "}
-            at avg cost {fmtUsd(sale.avgCostAtSale)}.
+            at avg cost {fmtPrice(sale.avgCostAtSale)}.
           </p>
-          <p className="text-muted-foreground">Avg cost unchanged · holdings {fmtSol(before.solHeld)} → {fmtSol(after.solHeld)}</p>
+          <p className="text-muted-foreground">Avg cost unchanged · holdings {fmtQty(before.held, asset)} → {fmtQty(after.held, asset)}</p>
         </>
       ) : (
         <>
           <p>
-            Avg cost {fmtUsd(before.avgCostBasis)} → <span className="font-semibold">{fmtUsd(after.avgCostBasis)}</span>
+            Avg cost {fmtPrice(before.avgCostBasis)} → <span className="font-semibold">{fmtPrice(after.avgCostBasis)}</span>
           </p>
-          <p className="text-muted-foreground">Holdings {fmtSol(before.solHeld)} → {fmtSol(after.solHeld)}</p>
+          <p className="text-muted-foreground">Holdings {fmtQty(before.held, asset)} → {fmtQty(after.held, asset)}</p>
         </>
       )}
     </div>

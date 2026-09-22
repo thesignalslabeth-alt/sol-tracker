@@ -24,6 +24,14 @@ export class JsonTradesRepo implements TradesRepo {
     await this.write([...(await this.readAll()), { ...trade, user_id: userId }]);
   }
 
+  async createMany(userId: string, trades: Trade[]) {
+    const all = await this.readAll();
+    const ids = new Set(all.map((t) => t.id));
+    const fresh = trades.filter((t) => !ids.has(t.id));
+    if (fresh.length) await this.write([...all, ...fresh.map((t) => ({ ...t, user_id: userId }))]);
+    return fresh.length;
+  }
+
   async update(userId: string, trade: Trade) {
     const all = await this.readAll();
     const i = all.findIndex((t) => t.id === trade.id && ownerOf(t) === userId);

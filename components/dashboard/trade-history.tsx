@@ -19,8 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { fmtDate, fmtSgd, fmtSignedPct, fmtSignedUsd, fmtSol, fmtUsd, plClass } from "@/lib/format";
-import { sortTrades, type Position, type SaleResult } from "@/lib/position";
+import { fmtDate, fmtPrice, fmtQty, fmtQtyNum, fmtSgd, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass } from "@/lib/format";
+import { sortTrades, type AssetPosition, type SaleResult } from "@/lib/position";
 import type { Trade } from "@/lib/trade-schema";
 
 function SideBadge({ side }: { side: Trade["side"] }) {
@@ -48,11 +48,13 @@ function RealizedCell({ sale }: { sale?: SaleResult }) {
 
 export function TradeHistory({
   trades,
-  position,
+  positions,
+  showAsset,
   onEdit,
 }: {
   trades: Trade[];
-  position: Position;
+  positions: AssetPosition[];
+  showAsset: boolean;
   onEdit: (t: Trade) => void;
 }) {
   const [newestFirst, setNewestFirst] = useState(true);
@@ -63,7 +65,10 @@ export function TradeHistory({
     const asc = sortTrades(trades);
     return newestFirst ? asc.reverse() : asc;
   }, [trades, newestFirst]);
-  const saleById = useMemo(() => new Map(position.sales.map((s) => [s.id, s])), [position.sales]);
+  const saleById = useMemo(
+    () => new Map(positions.flatMap((p) => p.position.sales).map((s) => [s.id, s])),
+    [positions],
+  );
 
   const confirmDelete = () => {
     const t = pendingDelete;
@@ -113,10 +118,11 @@ export function TradeHistory({
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2">
                     <SideBadge side={t.side} />
+                    {showAsset && <span className="text-sm font-semibold">{t.asset}</span>}
                     <span className="text-sm text-muted-foreground">{fmtDate(t.date)}</span>
                   </div>
                   <p className="font-medium tabular-nums">
-                    {fmtSol(t.sol_amount)} <span className="text-muted-foreground">@ {fmtUsd(t.total_usd / t.sol_amount)}</span>
+                    {fmtQty(t.quantity, t.asset)} <span className="text-muted-foreground">@ {fmtPrice(t.total_usd / t.quantity)}</span>
                   </p>
                   <p className="text-sm tabular-nums text-muted-foreground">
                     {fmtUsd(t.total_usd)}
@@ -150,9 +156,10 @@ export function TradeHistory({
                     Date <SortIcon className="size-3.5" />
                   </button>
                 </TableHead>
+                {showAsset && <TableHead>Asset</TableHead>}
                 <TableHead>Side</TableHead>
-                <TableHead className="text-right">SOL</TableHead>
-                <TableHead className="text-right">Price/SOL</TableHead>
+                <TableHead className="text-right">Quantity</TableHead>
+                <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">Total (USD)</TableHead>
                 <TableHead className="text-right">Realized P/L</TableHead>
                 <TableHead>Note</TableHead>
@@ -163,11 +170,12 @@ export function TradeHistory({
               {sorted.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="whitespace-nowrap">{fmtDate(t.date)}</TableCell>
+                  {showAsset && <TableCell className="font-semibold">{t.asset}</TableCell>}
                   <TableCell>
                     <SideBadge side={t.side} />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{t.sol_amount.toLocaleString("en-US", { maximumFractionDigits: 4 })}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmtUsd(t.total_usd / t.sol_amount)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtQtyNum(t.quantity)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtPrice(t.total_usd / t.quantity)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {fmtUsd(t.total_usd)}
                     {t.quote_currency === "SGD" && t.quote_amount != null && (
@@ -192,7 +200,7 @@ export function TradeHistory({
             <AlertDialogTitle>Delete this trade?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete &&
-                `${pendingDelete.side === "buy" ? "Buy" : "Sell"} of ${fmtSol(pendingDelete.sol_amount)} on ${fmtDate(pendingDelete.date)} for ${fmtUsd(pendingDelete.total_usd)}. This can't be undone.`}
+                `${pendingDelete.side === "buy" ? "Buy" : "Sell"} of ${fmtQty(pendingDelete.quantity, pendingDelete.asset)} on ${fmtDate(pendingDelete.date)} for ${fmtUsd(pendingDelete.total_usd)}. This can't be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -10,9 +10,9 @@ const geistSans = Geist({ variable: "--font-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SOL Tracker",
-  description: "Personal SOL position tracker",
-  appleWebApp: { capable: true, title: "SOL Tracker", statusBarStyle: "black-translucent" },
+  title: "Trade Tracker",
+  description: "Crypto trade tracker",
+  appleWebApp: { capable: true, title: "Trade Tracker", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

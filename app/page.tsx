@@ -4,12 +4,12 @@ import { Dashboard } from "@/components/dashboard/dashboard";
 import { NoticeScreen } from "@/components/dashboard/notice-screen";
 import { getViewer } from "@/lib/auth";
 import { clerkConfigured } from "@/lib/auth-config";
-import { calculatePosition, OversellError } from "@/lib/position";
-import { getSolPrice } from "@/lib/price";
+import { OversellError, positionsByAsset } from "@/lib/position";
+import { getPrices } from "@/lib/price";
 import { getTradesRepo } from "@/lib/trades-repo";
 
-export default async function Page() {
-  await connection(); // always render per request: live price + mutable trades
+export default async function Page({ searchParams }: PageProps<"/">) {
+  await connection(); // always render per request: live prices + mutable trades
 
   const viewer = await getViewer();
   if (viewer.status === "signed-out") redirect("/sign-in");
@@ -26,11 +26,15 @@ export default async function Page() {
     );
   }
 
-  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list(viewer.userId)]);
+  const [{ asset: requested }, prices, trades] = await Promise.all([
+    searchParams,
+    getPrices(),
+    getTradesRepo().then((r) => r.list(viewer.userId)),
+  ]);
 
-  let position;
+  let positions;
   try {
-    position = calculatePosition(trades, price.usd ?? 0);
+    positions = positionsByAsset(trades, prices.usd);
   } catch (e) {
     if (e instanceof OversellError) {
       return <NoticeScreen title="Trade ledger is inconsistent">{e.message}. Fix the stored trades.</NoticeScreen>;
@@ -38,11 +42,18 @@ export default async function Page() {
     throw e;
   }
 
+  const assets = positions.map((p) => p.asset);
+  const want = typeof requested === "string" ? requested.toUpperCase() : null;
+  // One asset: go straight to it. Several: overview unless one is picked.
+  const selected = want && assets.includes(want) ? want : assets.length === 1 ? assets[0] : "ALL";
+
   return (
     <Dashboard
       trades={trades}
-      position={position}
-      price={price}
+      positions={positions}
+      selected={selected}
+      prices={prices}
+      knownAssets={Object.keys(prices.usd).sort()}
       renderedAt={new Date().toISOString()}
       authBypassed={viewer.status === "bypassed"}
       showUserButton={clerkConfigured}

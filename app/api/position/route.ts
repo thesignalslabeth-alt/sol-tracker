@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, requireOwner } from "@/lib/auth";
-import { calculatePosition } from "@/lib/position";
-import { getSolPrice } from "@/lib/price";
+import { positionsByAsset } from "@/lib/position";
+import { getPrices } from "@/lib/price";
 import { getTradesRepo } from "@/lib/trades-repo";
 
 export async function GET() {
@@ -13,11 +13,11 @@ export async function GET() {
     throw e;
   }
 
-  const [price, trades] = await Promise.all([getSolPrice(), (await getTradesRepo()).list(userId)]);
+  const [prices, trades] = await Promise.all([getPrices(), (await getTradesRepo()).list(userId)]);
   return NextResponse.json({
     trades,
-    position: calculatePosition(trades, price.usd ?? 0),
-    price,
+    positions: positionsByAsset(trades, prices.usd),
+    prices: { stale: prices.stale, fetchedAt: prices.fetchedAt, usdPerSgd: prices.usdPerSgd },
     lastUpdated: new Date().toISOString(),
   });
 }

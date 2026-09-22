@@ -2,43 +2,42 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { fmtDate, fmtSol } from "@/lib/format";
-import type { Position } from "@/lib/position";
 
-// Fixed order, never cycled: Remaining first, then the most recent sales.
-// More than three sales fold the oldest into "Earlier sales".
-const SALE_COLORS = ["var(--chart-2)", "var(--chart-3)", "var(--chart-5)"];
+export type Slice = { name: string; value: number; color: string };
 
-type Slice = { name: string; value: number; color: string };
+// Validated categorical order (see app/globals.css). Fixed, never cycled: callers
+// fold anything past the last slot into an "Other" slice.
+export const CATEGORICAL = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-5)"];
+export const OTHER_COLOR = "var(--chart-4)";
 
-function slices(p: Position): Slice[] {
-  const sales = p.sales.map((s, i) => ({ name: `Sale ${i + 1} · ${fmtDate(s.date)}`, value: s.solAmount }));
-  const shown =
-    sales.length > 3
-      ? [
-          { name: `Earlier sales (${sales.length - 2})`, value: sales.slice(0, -2).reduce((a, s) => a + s.value, 0) },
-          ...sales.slice(-2),
-        ]
-      : sales;
-  return [
-    { name: "Remaining", value: p.solHeld, color: "var(--chart-1)" },
-    ...shown.map((s, i) => ({ ...s, color: SALE_COLORS[i] })),
-  ].filter((s) => s.value > 0);
-}
-
-export function SolAllocationChart({ position }: { position: Position }) {
-  const data = slices(position);
+export function DonutCard({
+  title,
+  description,
+  slices,
+  centerValue,
+  centerLabel,
+  format,
+}: {
+  title: string;
+  description?: string;
+  slices: Slice[];
+  centerValue: string;
+  centerLabel: string;
+  format: (n: number) => string;
+}) {
+  const data = slices.filter((s) => s.value > 0);
   const total = data.reduce((a, s) => a + s.value, 0);
+  const pct = (n: number) => `${((n / total) * 100).toFixed(0)}%`;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>SOL allocation</CardTitle>
-        <CardDescription>{fmtSol(total)} bought in total</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">No trades yet.</p>
+          <p className="py-10 text-center text-sm text-muted-foreground">Nothing to show yet.</p>
         ) : (
           <div className="flex flex-col items-center gap-4 sm:flex-row">
             <div className="relative h-[200px] w-full max-w-[240px] shrink-0 lg:h-[240px]">
@@ -50,7 +49,7 @@ export function SolAllocationChart({ position }: { position: Position }) {
                     nameKey="name"
                     innerRadius="62%"
                     outerRadius="95%"
-                    paddingAngle={1.5}
+                    paddingAngle={data.length > 1 ? 1.5 : 0}
                     cornerRadius={4}
                     stroke="var(--card)"
                     strokeWidth={2}
@@ -61,11 +60,12 @@ export function SolAllocationChart({ position }: { position: Position }) {
                     ))}
                   </Pie>
                   <Tooltip
+                    wrapperStyle={{ zIndex: 10 }}
                     content={({ active, payload }) =>
                       active && payload?.[0] ? (
                         <ChartTooltip
                           label={String(payload[0].name)}
-                          value={`${fmtSol(Number(payload[0].value))} · ${((Number(payload[0].value) / total) * 100).toFixed(1)}%`}
+                          value={`${format(Number(payload[0].value))} · ${pct(Number(payload[0].value))}`}
                         />
                       ) : null
                     }
@@ -73,8 +73,8 @@ export function SolAllocationChart({ position }: { position: Position }) {
                 </PieChart>
               </ResponsiveContainer>
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-semibold tabular-nums">{fmtSol(position.solHeld).replace(" SOL", "")}</span>
-                <span className="text-xs text-muted-foreground">SOL held</span>
+                <span className="max-w-[60%] truncate text-xl font-semibold tabular-nums">{centerValue}</span>
+                <span className="text-xs text-muted-foreground">{centerLabel}</span>
               </div>
             </div>
             {/* Legend doubles as direct labels: identity never relies on color alone */}
@@ -84,7 +84,7 @@ export function SolAllocationChart({ position }: { position: Position }) {
                   <span className="size-3 shrink-0 rounded-sm" style={{ background: s.color }} aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{s.name}</span>
                   <span className="tabular-nums text-muted-foreground">
-                    {fmtSol(s.value)} · {((s.value / total) * 100).toFixed(0)}%
+                    {format(s.value)} · {pct(s.value)}
                   </span>
                 </li>
               ))}

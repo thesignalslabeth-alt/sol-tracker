@@ -1,29 +1,32 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { AuthError, requireOwner } from "@/lib/auth";
-import { calculatePosition, OversellError } from "@/lib/position";
+import { OversellError, validateLedger } from "@/lib/position";
+import { getPrices } from "@/lib/price";
 import { normalizeInput, tradeInputSchema, type Trade } from "@/lib/trade-schema";
 import { getTradesRepo } from "@/lib/trades-repo";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ImportResult = { ok: true; inserted: number; skipped: number } | { ok: false; error: string };
 
-async function run(fn: (userId: string) => Promise<void>): Promise<ActionResult> {
+class InputError extends Error {}
+
+async function run<T extends { ok: true }>(fn: (userId: string) => Promise<T>): Promise<T | { ok: false; error: string }> {
   try {
     const userId = await requireOwner();
-    await fn(userId);
+    const result = await fn(userId);
     revalidatePath("/");
-    return { ok: true };
+    return result;
   } catch (e) {
     if (e instanceof AuthError || e instanceof OversellError || e instanceof InputError) {
       return { ok: false, error: e.message };
     }
     console.error(e);
-    return { ok: false, error: "Something went wrong saving the trade." };
+    return { ok: false, error: "Something went wrong saving your trades." };
   }
 }
-
-class InputError extends Error {}
 
 function parse(input: unknown) {
   const r = tradeInputSchema.safeParse(input);
@@ -31,31 +34,39 @@ function parse(input: unknown) {
   return normalizeInput(r.data);
 }
 
-/** Every mutation re-runs the whole ledger so no sell can end up oversold. */
-function assertValidLedger(trades: Trade[]) {
-  calculatePosition(trades, 0);
+/** Rejects assets without a Binance USDT pair. Skipped if Binance is unreachable. */
+async function assertListed(assets: Iterable<string>) {
+  const { usd } = await getPrices();
+  if (Object.keys(usd).length === 0) return;
+  const missing = [...new Set(assets)].filter((a) => !(a in usd));
+  if (missing.length) throw new InputError(`Not on Binance (no USDT pair): ${missing.join(", ")}`);
 }
 
 export async function createTrade(input: unknown): Promise<ActionResult> {
   return run(async (userId) => {
     const data = parse(input);
+    await assertListed([data.asset]);
     const repo = await getTradesRepo();
     const trade: Trade = { ...data, id: crypto.randomUUID(), created_at: new Date().toISOString() };
-    assertValidLedger([...(await repo.list(userId)), trade]);
+    // Every mutation re-runs the whole ledger so no sell can end up oversold.
+    validateLedger([...(await repo.list(userId)), trade]);
     await repo.create(userId, trade);
+    return { ok: true as const };
   });
 }
 
 export async function updateTrade(id: string, input: unknown): Promise<ActionResult> {
   return run(async (userId) => {
     const data = parse(input);
+    await assertListed([data.asset]);
     const repo = await getTradesRepo();
     const trades = await repo.list(userId);
     const existing = trades.find((t) => t.id === id);
     if (!existing) throw new InputError("That trade no longer exists.");
     const trade: Trade = { ...existing, ...data };
-    assertValidLedger(trades.map((t) => (t.id === id ? trade : t)));
+    validateLedger(trades.map((t) => (t.id === id ? trade : t)));
     await repo.update(userId, trade);
+    return { ok: true as const };
   });
 }
 
@@ -64,13 +75,52 @@ export async function deleteTrade(id: string): Promise<ActionResult> {
     const repo = await getTradesRepo();
     const trades = await repo.list(userId);
     try {
-      assertValidLedger(trades.filter((t) => t.id !== id));
+      validateLedger(trades.filter((t) => t.id !== id));
     } catch (e) {
       if (e instanceof OversellError) {
-        throw new InputError(`Can't delete: the sell on ${e.date} would then exceed holdings.`);
+        throw new InputError(`Can't delete: the ${e.asset} sell on ${e.date} would then exceed holdings.`);
       }
       throw e;
     }
     await repo.remove(userId, id);
+    return { ok: true as const };
+  });
+}
+
+export type ImportRow = { fingerprint: string; input: unknown; createdAt?: string };
+
+const MAX_IMPORT_ROWS = 5000;
+
+/**
+ * Imports parsed CSV rows. Ids are derived from the user + source row, so importing
+ * the same file twice skips rows already present. All-or-nothing: if the combined
+ * ledger would oversell, nothing is saved.
+ */
+export async function importTrades(rows: ImportRow[]): Promise<ImportResult> {
+  return run(async (userId) => {
+    if (!Array.isArray(rows) || rows.length === 0) throw new InputError("No rows to import.");
+    if (rows.length > MAX_IMPORT_ROWS) throw new InputError(`Import at most ${MAX_IMPORT_ROWS} rows at a time.`);
+
+    const now = Date.now();
+    const incoming: Trade[] = rows.map((r, i) => {
+      let data;
+      try {
+        data = parse(r.input);
+      } catch (e) {
+        throw new InputError(`Row ${i + 1}: ${(e as Error).message}`);
+      }
+      const created = r.createdAt && !Number.isNaN(Date.parse(r.createdAt)) ? r.createdAt : new Date(now + i).toISOString();
+      const id = "imp-" + createHash("sha256").update(`${userId}|${String(r.fingerprint)}`).digest("hex").slice(0, 32);
+      return { ...data, id, created_at: created };
+    });
+    await assertListed(incoming.map((t) => t.asset));
+
+    const repo = await getTradesRepo();
+    const existing = await repo.list(userId);
+    const seen = new Set(existing.map((t) => t.id));
+    const fresh = incoming.filter((t) => !seen.has(t.id) && (seen.add(t.id), true));
+    validateLedger([...existing, ...fresh]);
+    const inserted = await repo.createMany(userId, fresh);
+    return { ok: true as const, inserted, skipped: rows.length - inserted };
   });
 }

@@ -1,8 +1,9 @@
-# SOL Tracker
+# Trade Tracker
 
-Personal dashboard for a SOL spot position: moving-average cost basis,
-realized and unrealized P/L, portfolio value and break-even price, with a live price
-from CoinGecko. Mobile-first; trades are logged in the app.
+Crypto spot-position tracker: moving-average cost basis, realized and unrealized P/L,
+portfolio value and break-even price per asset, plus a portfolio overview. Any coin
+with a USDT pair on Binance can be tracked; live prices come from Binance's public API.
+Mobile-first; trades are logged in the app or imported from CSV.
 
 Stack: Next.js 16 (App Router) · Tailwind v4 + shadcn/ui · Recharts · Clerk · Neon Postgres.
 No Vite anywhere; tests use Node's built-in runner.
@@ -33,7 +34,7 @@ re-averaging, oversell and back-dated-sell cases.
 
 Tap **Add trade** (bottom of the screen on mobile, top right on desktop):
 
-1. Pick **Buy** or **Sell**, the date and the currency.
+1. Pick **Buy** or **Sell**, the asset (suggestions come from Binance), the date and the currency.
 2. Enter the SOL amount and either the **total** or the **price per SOL**, net of fees.
    For sells, **Max** fills the most you can sell on that date.
 3. For **SGD**, the FX rate (USD per 1 SGD) is pre-filled from the live rate; change it to
@@ -44,8 +45,23 @@ Each signed-in user has their own ledger: a new user starts empty and can never 
 anyone else's trades. Every add, edit and delete re-checks the whole ledger, so a sell can never end up larger
 than what you held at that date.
 
+## Importing and exporting CSV
+
+Tap the upload icon in the header:
+
+- **Binance:** Orders → Spot Order → Trade History → Export. Pairs quoted in a USD
+  stablecoin (USDT, USDC, FDUSD…) are imported; others (e.g. ETH/BTC) are listed as
+  errors and skipped. Fees paid in the traded coin or the stablecoin are applied;
+  fees paid in BNB are flagged but not included in cost basis.
+- **Template:** `date,asset,side,quantity,total,currency,fx_usd_per_sgd,total_usd,fee,note`
+  (download it from the import sheet).
+
+You see a preview of every row before anything is saved. Imports are all-or-nothing
+(rejected if they'd oversell) and re-importing the same file skips rows already present.
+The download icon exports all your trades in the template format.
+
 **How cost basis works:** moving average cost. A buy re-averages your cost; a sell
-removes SOL at the current average and leaves the average unchanged.
+removes units at the current average and leaves the average unchanged. Each asset has its own average.
 
 ## Clerk setup
 
@@ -81,9 +97,11 @@ app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
 lib/position.ts              pure position math (+ tests)
 lib/trades-repo.ts           storage interface → lib/repo/{json,postgres}.ts
-lib/price.ts                 CoinGecko fetch, 60s cache, stale fallback
+lib/price.ts                 Binance prices (60s cache) + USD/SGD rate, stale fallback
+lib/csv.ts                   CSV parsing (template + Binance) and export (+ tests)
 lib/auth.ts                  Clerk allowlist check
 components/dashboard/        metric cards, charts, trade history
 components/trade-form/       entry form (drawer on mobile, dialog on desktop)
+components/import/           CSV import sheet with row-by-row preview
 db/schema.sql                Postgres schema
 ```

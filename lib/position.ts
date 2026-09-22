@@ -4,10 +4,11 @@ import type { Trade } from "./trade-schema";
 export class OversellError extends Error {
   constructor(
     public readonly tradeId: string,
+    public readonly asset: string,
     public readonly date: string,
     public readonly shortfall: number,
   ) {
-    super(`Sell on ${date} exceeds holdings at that date by ${Number(shortfall.toFixed(4))} SOL`);
+    super(`${asset} sell on ${date} exceeds holdings at that date by ${Number(shortfall.toFixed(8))} ${asset}`);
     this.name = "OversellError";
   }
 }
@@ -15,7 +16,7 @@ export class OversellError extends Error {
 export type SaleResult = {
   id: string;
   date: string;
-  solAmount: number;
+  quantity: number;
   proceeds: number;
   avgCostAtSale: number;
   soldBasis: number;
@@ -25,7 +26,7 @@ export type SaleResult = {
 
 export type Position = {
   avgCostBasis: number;
-  solHeld: number;
+  held: number;
   remainingCostBasis: number;
   totalCapitalDeployed: number;
   totalRealizedCash: number;
@@ -48,13 +49,39 @@ export function sortTrades<T extends Pick<Trade, "date" | "created_at">>(trades:
   );
 }
 
+/** Trades grouped by asset symbol, assets sorted alphabetically. */
+export function groupByAsset(trades: readonly Trade[]): Map<string, Trade[]> {
+  const groups = new Map<string, Trade[]>();
+  for (const t of [...trades].sort((a, b) => a.asset.localeCompare(b.asset))) {
+    const g = groups.get(t.asset);
+    if (g) g.push(t);
+    else groups.set(t.asset, [t]);
+  }
+  return groups;
+}
+
+/** Throws OversellError if any asset's ledger has a sell exceeding holdings. */
+export function validateLedger(trades: readonly Trade[]): void {
+  for (const group of groupByAsset(trades).values()) calculatePosition(group, 0);
+}
+
+export type AssetPosition = { asset: string; price: number | null; position: Position };
+
+/** One position per asset; assets without a price are valued at 0 and flagged with price: null. */
+export function positionsByAsset(trades: readonly Trade[], prices: Readonly<Record<string, number>>): AssetPosition[] {
+  return [...groupByAsset(trades)].map(([asset, group]) => {
+    const price = prices[asset] ?? null;
+    return { asset, price, position: calculatePosition(group, price ?? 0) };
+  });
+}
+
 /**
- * Moving average cost: buys re-average, sells remove basis at the current average
+ * Moving average cost for a single asset's trades: buys re-average, sells remove basis at the current average
  * and leave the average unchanged. Throws OversellError if a sell exceeds holdings
  * at its own point in time.
  */
 export function calculatePosition(trades: readonly Trade[], currentPrice: number): Position {
-  let solHeld = 0;
+  let held = 0;
   let costBasis = 0;
   let avgCost = 0;
   let totalCapitalDeployed = 0;
@@ -65,21 +92,21 @@ export function calculatePosition(trades: readonly Trade[], currentPrice: number
   for (const t of sortTrades(trades)) {
     if (t.side === "buy") {
       costBasis += t.total_usd;
-      solHeld += t.sol_amount;
-      avgCost = costBasis / solHeld;
+      held += t.quantity;
+      avgCost = costBasis / held;
       totalCapitalDeployed += t.total_usd;
       continue;
     }
 
-    if (t.sol_amount > solHeld + EPS) {
-      throw new OversellError(t.id, t.date, t.sol_amount - solHeld);
+    if (t.quantity > held + EPS) {
+      throw new OversellError(t.id, t.asset, t.date, t.quantity - held);
     }
-    const soldBasis = t.sol_amount * avgCost;
+    const soldBasis = t.quantity * avgCost;
     const pl = t.total_usd - soldBasis;
     sales.push({
       id: t.id,
       date: t.date,
-      solAmount: t.sol_amount,
+      quantity: t.quantity,
       proceeds: t.total_usd,
       avgCostAtSale: avgCost,
       soldBasis,
@@ -89,21 +116,21 @@ export function calculatePosition(trades: readonly Trade[], currentPrice: number
     realizedPL += pl;
     totalRealizedCash += t.total_usd;
     costBasis -= soldBasis;
-    solHeld -= t.sol_amount;
-    if (solHeld < EPS) {
-      solHeld = 0;
+    held -= t.quantity;
+    if (held < EPS) {
+      held = 0;
       costBasis = 0;
     }
   }
 
-  const unrealizedValue = solHeld * currentPrice;
+  const unrealizedValue = held * currentPrice;
   const unrealizedPL = unrealizedValue - costBasis;
   const totalPortfolioValue = totalRealizedCash + unrealizedValue;
   const totalPL = realizedPL + unrealizedPL;
 
   return {
-    avgCostBasis: solHeld > 0 ? avgCost : 0,
-    solHeld,
+    avgCostBasis: held > 0 ? avgCost : 0,
+    held,
     remainingCostBasis: costBasis,
     totalCapitalDeployed,
     totalRealizedCash,
@@ -115,7 +142,7 @@ export function calculatePosition(trades: readonly Trade[], currentPrice: number
     totalPL,
     totalProfitPct: totalCapitalDeployed > 0 ? (totalPL / totalCapitalDeployed) * 100 : 0,
     breakEvenPrice:
-      solHeld > 0 ? Math.max(0, (totalCapitalDeployed - totalRealizedCash) / solHeld) : 0,
+      held > 0 ? Math.max(0, (totalCapitalDeployed - totalRealizedCash) / held) : 0,
   };
 }
 
@@ -133,7 +160,7 @@ export function previewTrade(
   currentPrice: number,
   replaceId?: string,
 ): TradePreview {
-  const base = replaceId ? trades.filter((t) => t.id !== replaceId) : [...trades];
+  const base = trades.filter((t) => t.asset === draft.asset && t.id !== replaceId);
   let before: Position | null = null;
   try {
     before = calculatePosition(base, currentPrice);
@@ -151,12 +178,12 @@ export function previewTrade(
  * oversold. A new trade sorts after existing trades on the same day. Used for the
  * sell form's "Max" button.
  */
-export function maxSellable(trades: readonly Trade[], date: string, excludeId?: string): number {
+export function maxSellable(trades: readonly Trade[], asset: string, date: string, excludeId?: string): number {
   let held = 0;
   let min = Infinity;
   for (const t of sortTrades(trades)) {
-    if (t.id === excludeId) continue;
-    held += t.side === "buy" ? t.sol_amount : -t.sol_amount;
+    if (t.id === excludeId || t.asset !== asset) continue;
+    held += t.side === "buy" ? t.quantity : -t.quantity;
     if (t.date > date) min = Math.min(min, held);
     else min = held; // running holdings up to and including the draft's day
   }

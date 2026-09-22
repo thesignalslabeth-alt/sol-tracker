@@ -8,6 +8,8 @@ import type { Trade } from "./trade-schema";
 export interface TradesRepo {
   list(userId: string): Promise<Trade[]>;
   create(userId: string, trade: Trade): Promise<void>;
+  /** Bulk insert; trades whose id already exists are skipped. Returns the number inserted. */
+  createMany(userId: string, trades: Trade[]): Promise<number>;
   update(userId: string, trade: Trade): Promise<void>;
   remove(userId: string, id: string): Promise<void>;
 }

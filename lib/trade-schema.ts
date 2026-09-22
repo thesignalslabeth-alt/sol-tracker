@@ -4,8 +4,9 @@ import { z } from "zod";
 export type Trade = {
   id: string;
   date: string; // YYYY-MM-DD
+  asset: string; // Binance base asset symbol, e.g. "SOL", "BTC"
   side: "buy" | "sell";
-  sol_amount: number;
+  quantity: number; // amount of `asset`
   total_usd: number; // cost for buys, proceeds for sells, net of fees
   fee_usd: number;
   quote_currency: "USD" | "SGD";
@@ -25,8 +26,13 @@ const positive = (label: string) =>
 export const tradeInputSchema = z
   .object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+    asset: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z0-9]{1,15}$/, "Asset must be a symbol like SOL or BTC"),
     side: z.enum(["buy", "sell"]),
-    sol_amount: positive("SOL amount"),
+    quantity: positive("Amount"),
     total_usd: positive("USD total"),
     fee_usd: z.number().finite().min(0, "Fee can't be negative"),
     quote_currency: z.enum(["USD", "SGD"]),

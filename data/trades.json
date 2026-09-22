@@ -2,8 +2,9 @@
   {
     "id": "buys-aggregate-2026",
     "date": "2026-08-01",
+    "asset": "SOL",
     "side": "buy",
-    "sol_amount": 97,
+    "quantity": 97,
     "total_usd": 7029.83,
     "fee_usd": 0,
     "quote_currency": "USD",
@@ -15,8 +16,9 @@
   {
     "id": "2026-08-27-sell-1",
     "date": "2026-08-27",
+    "asset": "SOL",
     "side": "sell",
-    "sol_amount": 33,
+    "quantity": 33,
     "total_usd": 3359.56,
     "fee_usd": 0,
     "quote_currency": "SGD",
@@ -28,8 +30,9 @@
   {
     "id": "2026-09-22-sell-2",
     "date": "2026-09-22",
+    "asset": "SOL",
     "side": "sell",
-    "sol_amount": 24,
+    "quantity": 24,
     "total_usd": 2400,
     "fee_usd": 0,
     "quote_currency": "USD",

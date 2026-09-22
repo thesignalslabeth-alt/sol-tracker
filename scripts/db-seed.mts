@@ -17,6 +17,14 @@ const sql = neon(url);
 // Migration for tables created before per-user data. Runs before schema.sql so its
 // user_id index can be created; rows without an owner go to SEED_USER_ID.
 await sql`alter table if exists trades add column if not exists user_id text`;
+await sql`alter table if exists trades add column if not exists asset text not null default 'SOL'`;
+// sol_amount → quantity (multi-asset). Only renames if the old column still exists.
+await sql`
+  do $$ begin
+    if exists (select 1 from information_schema.columns where table_name = 'trades' and column_name = 'sol_amount') then
+      alter table trades rename column sol_amount to quantity;
+    end if;
+  end $$`;
 // Neon's HTTP driver runs one statement per query.
 const schema = readFileSync(join(process.cwd(), "db/schema.sql"), "utf8");
 for (const stmt of schema.split(";").map((s) => s.trim()).filter(Boolean)) await sql.query(stmt);
@@ -29,9 +37,9 @@ const trades: Trade[] = JSON.parse(readFileSync(join(process.cwd(), "data/trades
 let inserted = 0;
 for (const t of trades) {
   const rows = await sql`
-    insert into trades (id, user_id, date, side, sol_amount, total_usd, fee_usd, quote_currency,
+    insert into trades (id, user_id, date, asset, side, quantity, total_usd, fee_usd, quote_currency,
                         quote_amount, fx_usd_per_quote, note, created_at)
-    values (${t.id}, ${userId}, ${t.date}, ${t.side}, ${t.sol_amount}, ${t.total_usd}, ${t.fee_usd},
+    values (${t.id}, ${userId}, ${t.date}, ${t.asset}, ${t.side}, ${t.quantity}, ${t.total_usd}, ${t.fee_usd},
             ${t.quote_currency}, ${t.quote_amount}, ${t.fx_usd_per_quote}, ${t.note}, ${t.created_at})
     on conflict (id) do nothing
     returning id`;

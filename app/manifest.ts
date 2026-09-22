@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SOL Tracker",
-    short_name: "SOL",
-    description: "Personal SOL position tracker",
+    name: "Trade Tracker",
+    short_name: "Trades",
+    description: "Crypto trade tracker",
     start_url: "/",
     display: "standalone",
     background_color: "#0a0a0a",
