@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+!.env.example
+
+# atomic-write temp file
+/data/*.tmp
+
+# local tooling
+/.claude/
