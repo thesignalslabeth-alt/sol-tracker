@@ -47,9 +47,15 @@ const FEATURES = [
 ];
 
 const STEPS = [
-  { title: "Sign in", body: "With Google or email." },
+  { title: "Sign in with Google", body: "Google is the only sign-in option. No new password to remember." },
   { title: "Add your trades", body: "Type them in, or import a Binance CSV." },
   { title: "Track", body: "Cost basis, P/L and allocation update with live prices." },
+];
+
+const ACCESS_STEPS = [
+  { title: "Sign in with Google", body: "You'll see a “You're almost in” page with your user ID." },
+  { title: "Copy or send your ID", body: "Tap Copy ID, or Send to owner to share it straight from your phone." },
+  { title: "Refresh once you're added", body: "Your own private tracker opens, ready for your first trade." },
 ];
 
 // Illustrative figures only. This page is public, so never show real account data here.
@@ -100,7 +106,9 @@ export function AboutPage({ signedIn, inviteOnly }: { signedIn: boolean; inviteO
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {cta}
               {inviteOnly && !signedIn && (
-                <span className="text-sm text-muted-foreground">Invite only for now. Ask the owner for access.</span>
+                <span className="text-sm text-muted-foreground">
+                  Invite only. <a href="#access" className="underline underline-offset-4">How to get access</a>
+                </span>
               )}
             </div>
           </div>
@@ -161,6 +169,34 @@ export function AboutPage({ signedIn, inviteOnly }: { signedIn: boolean; inviteO
             ))}
           </ol>
         </section>
+
+        {/* Access */}
+        {inviteOnly && (
+          <section id="access" aria-labelledby="access-title" className="scroll-mt-20 space-y-4 py-8">
+            <div className="space-y-1">
+              <h2 id="access-title" className="text-xl font-semibold md:text-2xl">
+                Getting access
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Trade Tracker is invite-only for now. Signing in by itself doesn&apos;t let you in; the owner has to add you
+                first. It takes one message:
+              </p>
+            </div>
+            <ol className="grid gap-3 md:grid-cols-3">
+              {ACCESS_STEPS.map((s, i) => (
+                <li key={s.title} className="flex gap-3 rounded-xl border p-4">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="font-medium">{s.title}</p>
+                    <p className="text-sm text-muted-foreground">{s.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         {/* Install */}
         <section id="install" aria-labelledby="install-title" className="scroll-mt-20 space-y-4 py-8">

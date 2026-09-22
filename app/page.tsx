@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { AboutPage } from "@/components/about/about-page";
 import { Dashboard } from "@/components/dashboard/dashboard";
+import { AccessRequest } from "@/components/dashboard/access-request";
 import { NoticeScreen } from "@/components/dashboard/notice-screen";
 import { getViewer } from "@/lib/auth";
 import { allowedUserIds, clerkConfigured } from "@/lib/auth-config";
@@ -19,10 +20,12 @@ export default async function Page({ searchParams }: PageProps<"/">) {
   }
   if (viewer.status === "forbidden") {
     return (
-      <NoticeScreen title="Not authorized" showUserButton>
-        This account isn&apos;t on the allowlist. To grant access, add this ID to{" "}
-        <code className="font-mono">ALLOWED_USER_IDS</code>:
-        <code className="mt-3 block rounded-md bg-muted p-2 font-mono text-sm break-all">{viewer.userId}</code>
+      <NoticeScreen title="You're almost in" showUserButton>
+        <p className="mb-4">
+          Trade Tracker is invite-only. Copy your user ID below and send it to the person who invited you, so they can
+          add you.
+        </p>
+        <AccessRequest userId={viewer.userId} />
       </NoticeScreen>
     );
   }
