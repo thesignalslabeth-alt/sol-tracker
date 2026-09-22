@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
-    "db:seed": "node --import tsx scripts/db-seed.mts"
+    "db:seed": "node --import tsx scripts/db-seed.mts",
+    "dev:lan": "next dev"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.4",

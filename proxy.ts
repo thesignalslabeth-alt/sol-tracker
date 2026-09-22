@@ -1,6 +1,6 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
-import { clerkConfigured } from "@/lib/auth-config";
+import { authBypassed, clerkConfigured } from "@/lib/auth-config";
 
 // Clerk only attaches the session here. Access is enforced where the data is read:
 // app/page.tsx redirects signed-out users, and every server action / API route calls
@@ -9,10 +9,8 @@ const withClerk = clerkMiddleware();
 
 export default function proxy(req: NextRequest, event: NextFetchEvent) {
   if (clerkConfigured) return withClerk(req, event);
-  if (process.env.NODE_ENV === "production") {
-    return new NextResponse("Authentication is not configured.", { status: 503 });
-  }
-  return NextResponse.next(); // local dev without Clerk keys; the UI shows a banner
+  if (authBypassed) return NextResponse.next(); // explicit local auth-off mode; the UI shows a banner
+  return new NextResponse("Authentication is not configured.", { status: 503 });
 }
 
 export const config = {

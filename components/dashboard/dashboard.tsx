@@ -62,7 +62,7 @@ export function Dashboard({
     <div className="min-h-dvh pb-28 md:pb-12">
       {authBypassed && (
         <div className="bg-amber-500/15 px-4 py-2 text-center text-xs text-amber-700 dark:text-amber-300">
-          Auth is off: Clerk keys not set (local dev only).
+          Auth is off (DEV_AUTH_BYPASS=1, local dev only).
         </div>
       )}
       <DashboardHeader

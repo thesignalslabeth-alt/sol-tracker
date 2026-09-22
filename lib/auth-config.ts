@@ -5,10 +5,13 @@ export const clerkConfigured = Boolean(
 );
 
 /**
- * Without Clerk keys, local dev runs unprotected (with a visible banner) so the app
- * is usable before keys are set up. Production refuses to serve instead.
+ * Auth-off mode for local UI work. All three must hold: no Clerk keys, not a
+ * production build, and an explicit DEV_AUTH_BYPASS=1. Missing keys alone never
+ * open the app. Pair it with a dev server bound to 127.0.0.1 so nothing else on the
+ * network can reach it.
  */
-export const authBypassed = !clerkConfigured && process.env.NODE_ENV !== "production";
+export const authBypassed =
+  !clerkConfigured && process.env.NODE_ENV !== "production" && process.env.DEV_AUTH_BYPASS === "1";
 
 export function allowedUserIds(): string[] {
   return (process.env.ALLOWED_USER_IDS ?? "")

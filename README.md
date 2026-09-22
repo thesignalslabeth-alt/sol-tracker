@@ -17,8 +17,14 @@ npm run dev
 ```
 
 Open http://localhost:3000. With `TRADES_STORE=json`, trades are read from and written
-to `data/trades.json`. Without Clerk keys, local dev runs **with auth off** and shows a
-banner; a production build refuses to serve until keys are set.
+to `data/trades.json`.
+
+`npm run dev` listens on 127.0.0.1 only, so nothing else on your network can reach it.
+To test on your phone over Wi-Fi, use `npm run dev:lan`, and only with Clerk keys set.
+
+Without Clerk keys the app refuses to serve. For UI work without signing in, set
+`DEV_AUTH_BYPASS=1` as well (and blank the Clerk keys): auth is then off and a banner
+shows. This only works in `next dev`, never in a production build.
 
 ## Tests
 
