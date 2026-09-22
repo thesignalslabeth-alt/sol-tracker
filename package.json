@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
-    "db:seed": "node --import tsx scripts/db-seed.ts"
+    "db:seed": "node --import tsx scripts/db-seed.mts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.4",

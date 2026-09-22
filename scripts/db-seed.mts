@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { neon } from "@neondatabase/serverless";
-import type { Trade } from "../lib/trade-schema";
+import type { Trade } from "../lib/trade-schema.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
