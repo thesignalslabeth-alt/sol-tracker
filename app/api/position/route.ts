@@ -17,7 +17,7 @@ export async function GET() {
   return NextResponse.json({
     trades,
     positions: positionsByAsset(trades, prices.usd),
-    prices: { stale: prices.stale, fetchedAt: prices.fetchedAt, usdPerSgd: prices.usdPerSgd },
+    prices: { stale: prices.stale, fetchedAt: prices.fetchedAt, usdPer: prices.usdPer },
     lastUpdated: new Date().toISOString(),
   });
 }

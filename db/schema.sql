@@ -7,7 +7,8 @@ create table if not exists trades (
   quantity       numeric(20, 8) not null check (quantity > 0),
   total_usd        numeric(20, 8) not null check (total_usd > 0),
   fee_usd          numeric(20, 8) not null default 0 check (fee_usd >= 0),
-  quote_currency   text not null check (quote_currency in ('USD', 'SGD')),
+  -- Allowed codes are kept in sync with lib/currencies.ts by `npm run db:seed`.
+  quote_currency   text not null check (quote_currency in ('USD', 'SGD', 'MYR', 'IDR', 'THB', 'PHP', 'VND', 'HKD', 'JPY', 'KRW', 'CNY', 'TWD', 'INR')),
   quote_amount     numeric(20, 8),
   fx_usd_per_quote numeric(20, 8),
   note             text,

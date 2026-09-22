@@ -119,6 +119,9 @@ test("schema rejects zero, negative and non-numeric amounts", () => {
   }
   assert.equal(tradeInputSchema.safeParse({ ...valid, quote_currency: "SGD" }).success, false, "SGD without amount");
   assert.equal(tradeInputSchema.parse(valid).asset, "SOL", "asset is upper-cased");
+  assert.ok(tradeInputSchema.safeParse({ ...valid, quote_currency: "MYR", quote_amount: 408, fx_usd_per_quote: 0.245 }).success, "MYR");
+  assert.equal(tradeInputSchema.safeParse({ ...valid, quote_currency: "MYR" }).success, false, "MYR without amount");
+  assert.equal(tradeInputSchema.safeParse({ ...valid, quote_currency: "EUR", quote_amount: 1, fx_usd_per_quote: 1 }).success, false, "EUR unsupported");
   assert.equal(tradeInputSchema.safeParse({ ...valid, asset: "SOL/USDT" }).success, false, "bad symbol");
 });
 

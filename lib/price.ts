@@ -1,10 +1,12 @@
 import "server-only";
 
+import { CURRENCIES, type Currency } from "./currencies";
+
 export type Prices = {
   /** USD price per base asset (from its Binance USDT pair; USDT treated as USD). */
   usd: Record<string, number>;
-  /** USD per 1 SGD, for SGD trades. */
-  usdPerSgd: number | null;
+  /** USD per 1 unit of each supported currency (USD itself is always 1). */
+  usdPer: Partial<Record<Currency, number>>;
   stale: boolean;
   fetchedAt: string | null;
 };
@@ -15,13 +17,15 @@ export type Prices = {
 // cached 60s, so at most ~1 request/min per server instance — far below the limits.
 const BINANCE_HOSTS = ["https://data-api.binance.vision", "https://api.binance.com"];
 
-// Binance has no SGD spot pairs; USDT→SGD comes from CoinGecko's public API
-// (keyless, rate-limited — hourly caching keeps us well under it).
-const FX_URL = "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=sgd";
+// Binance has no spot pairs in most Asian currencies, so fiat rates come from
+// CoinGecko's public API: USDT priced in each currency (keyless, rate-limited —
+// hourly caching keeps us well under it). USDT is treated as USD throughout.
+const FIAT = CURRENCIES.filter((c) => c !== "USD");
+const FX_URL = `https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=${FIAT.join(",").toLowerCase()}`;
 
 // Last good values, returned with stale: true on failure. Per server instance only.
 let lastUsd: Record<string, number> | null = null;
-let lastFx: number | null = null;
+let lastFx: Partial<Record<Currency, number>> = {};
 let lastFetchedAt: string | null = null;
 
 async function fetchBinanceUsd(): Promise<Record<string, number>> {
@@ -49,7 +53,7 @@ async function fetchBinanceUsd(): Promise<Record<string, number>> {
   throw lastError;
 }
 
-async function fetchUsdPerSgd(): Promise<number> {
+async function fetchUsdPer(): Promise<Partial<Record<Currency, number>>> {
   const key = process.env.COINGECKO_API_KEY;
   const res = await fetch(FX_URL, {
     headers: key ? { "x-cg-demo-api-key": key } : undefined,
@@ -57,13 +61,18 @@ async function fetchUsdPerSgd(): Promise<number> {
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
-  const sgdPerUsdt = ((await res.json()) as { tether?: { sgd?: number } }).tether?.sgd;
-  if (!sgdPerUsdt) throw new Error("CoinGecko response missing tether.sgd");
-  return 1 / sgdPerUsdt;
+  const perUsdt = ((await res.json()) as { tether?: Record<string, number> }).tether ?? {};
+  const usdPer: Partial<Record<Currency, number>> = {};
+  for (const c of FIAT) {
+    const units = perUsdt[c.toLowerCase()];
+    if (units > 0) usdPer[c] = 1 / units;
+  }
+  if (!usdPer.SGD) throw new Error("CoinGecko response missing tether rates");
+  return usdPer;
 }
 
 export async function getPrices(): Promise<Prices> {
-  const [usd, fx] = await Promise.allSettled([fetchBinanceUsd(), fetchUsdPerSgd()]);
+  const [usd, fx] = await Promise.allSettled([fetchBinanceUsd(), fetchUsdPer()]);
   let stale = false;
 
   if (usd.status === "fulfilled") {
@@ -74,7 +83,7 @@ export async function getPrices(): Promise<Prices> {
     stale = true;
   }
   if (fx.status === "fulfilled") lastFx = fx.value;
-  else console.warn("SGD FX fetch failed:", fx.reason instanceof Error ? fx.reason.message : fx.reason);
+  else console.warn("FX fetch failed:", fx.reason instanceof Error ? fx.reason.message : fx.reason);
 
-  return { usd: lastUsd ?? {}, usdPerSgd: lastFx, stale: stale || !lastUsd, fetchedAt: lastFetchedAt };
+  return { usd: lastUsd ?? {}, usdPer: { ...lastFx, USD: 1 }, stale: stale || !lastUsd, fetchedAt: lastFetchedAt };
 }

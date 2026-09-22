@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CURRENCIES, type Currency } from "./currencies";
 
 /** A trade as stored. Only raw facts; everything derived is computed in lib/position.ts. */
 export type Trade = {
@@ -9,7 +10,7 @@ export type Trade = {
   quantity: number; // amount of `asset`
   total_usd: number; // cost for buys, proceeds for sells, net of fees
   fee_usd: number;
-  quote_currency: "USD" | "SGD";
+  quote_currency: Currency;
   quote_amount: number | null;
   fx_usd_per_quote: number | null;
   note: string | null;
@@ -35,14 +36,18 @@ export const tradeInputSchema = z
     quantity: positive("Amount"),
     total_usd: positive("USD total"),
     fee_usd: z.number().finite().min(0, "Fee can't be negative"),
-    quote_currency: z.enum(["USD", "SGD"]),
-    quote_amount: positive("SGD amount").nullable(),
+    quote_currency: z.enum(CURRENCIES),
+    quote_amount: positive("Amount in the trade currency").nullable(),
     fx_usd_per_quote: positive("FX rate").nullable(),
     note: z.string().max(500).nullable(),
   })
   .superRefine((t, ctx) => {
-    if (t.quote_currency === "SGD" && (t.quote_amount == null || t.fx_usd_per_quote == null)) {
-      ctx.addIssue({ code: "custom", path: ["quote_amount"], message: "SGD trades need an SGD amount and FX rate" });
+    if (t.quote_currency !== "USD" && (t.quote_amount == null || t.fx_usd_per_quote == null)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["quote_amount"],
+        message: `${t.quote_currency} trades need a ${t.quote_currency} amount and exchange rate`,
+      });
     }
   });
 

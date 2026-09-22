@@ -17,8 +17,9 @@ export type ParsedRow = {
 
 export type ParseResult = { format: CsvFormat; rows: ParsedRow[] } | { format: null; error: string };
 
-// total is in `currency`; total_usd (optional on import) keeps the exact USD value of SGD trades.
-export const TEMPLATE_HEADERS = ["date", "asset", "side", "quantity", "total", "currency", "fx_usd_per_sgd", "total_usd", "fee", "note"] as const;
+// total and fee are in `currency`; fx_usd_per_quote is USD per 1 unit of it (blank for USD);
+// total_usd (optional on import) keeps the exact USD value of non-USD trades.
+export const TEMPLATE_HEADERS = ["date", "asset", "side", "quantity", "total", "currency", "fx_usd_per_quote", "total_usd", "fee", "note"] as const;
 
 // Quote assets valued 1:1 with USD. Other quotes (BTC, BNB, EUR…) would need a
 // historical conversion rate, which Binance's export doesn't include.
@@ -73,7 +74,9 @@ function finish(line: number, row: Record<string, string>, draft: unknown, extra
 function parseTemplateRow(line: number, row: Record<string, string>, known?: Set<string>): ParsedRow {
   const get = (k: string) => (row[k] ?? "").trim();
   const currency = (get("currency") || "USD").toUpperCase();
-  const fx = currency === "SGD" ? Number(get("fx_usd_per_sgd")) : 1;
+  const foreign = currency !== "USD";
+  // fx_usd_per_sgd is the column name from before multi-currency support.
+  const fx = foreign ? Number(get("fx_usd_per_quote") || get("fx_usd_per_sgd")) : 1;
   const total = Number(get("total").replace(/,/g, ""));
   const exactUsd = get("total_usd") ? Number(get("total_usd").replace(/,/g, "")) : null;
   const fee = get("fee") ? Number(get("fee").replace(/,/g, "")) : 0;
@@ -85,8 +88,8 @@ function parseTemplateRow(line: number, row: Record<string, string>, known?: Set
     total_usd: exactUsd ?? total * fx,
     fee_usd: fee * fx,
     quote_currency: currency,
-    quote_amount: currency === "SGD" ? total : null,
-    fx_usd_per_quote: currency === "SGD" ? fx : null,
+    quote_amount: foreign ? total : null,
+    fx_usd_per_quote: foreign ? fx : null,
     note: get("note") || null,
   };
   return finish(line, row, draft, {}, known);
@@ -219,16 +222,16 @@ export function parseTradesCsv(text: string, knownAssets?: Set<string>): ParseRe
 /** Trades → template CSV (re-importable). */
 export function toTemplateCsv(trades: readonly Trade[]): string {
   const rows = trades.map((t) => {
-    const sgd = t.quote_currency === "SGD" && t.quote_amount != null && t.fx_usd_per_quote != null;
-    const fx = sgd ? t.fx_usd_per_quote! : 1;
+    const foreign = t.quote_currency !== "USD" && t.quote_amount != null && t.fx_usd_per_quote != null;
+    const fx = foreign ? t.fx_usd_per_quote! : 1;
     return {
       date: t.date,
       asset: t.asset,
       side: t.side,
       quantity: t.quantity,
-      total: sgd ? t.quote_amount : t.total_usd,
+      total: foreign ? t.quote_amount : t.total_usd,
       currency: t.quote_currency,
-      fx_usd_per_sgd: sgd ? t.fx_usd_per_quote : "",
+      fx_usd_per_quote: foreign ? t.fx_usd_per_quote : "",
       total_usd: t.total_usd,
       fee: t.fee_usd ? +(t.fee_usd / fx).toFixed(8) : "",
       note: t.note ?? "",

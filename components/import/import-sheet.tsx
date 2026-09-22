@@ -16,7 +16,8 @@ const PREVIEW_ROWS = 100;
 const TEMPLATE =
   TEMPLATE_HEADERS.join(",") +
   "\n2026-08-01,SOL,buy,10,725.50,USD,,,,Example buy" +
-  "\n2026-08-27,SOL,sell,5,640,SGD,0.7868,,,Example SGD sell\n";
+  "\n2026-08-27,SOL,sell,5,640,SGD,0.7868,,,Example SGD sell" +
+  "\n2026-09-02,BTC,buy,0.01,3480,MYR,0.2451,,,Example MYR buy\n";
 const TEMPLATE_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`;
 
 export function ImportSheet({

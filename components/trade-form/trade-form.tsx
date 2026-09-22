@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { fmtPrice, fmtQty, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass, todaySg } from "@/lib/format";
+import { fmtMoney, fmtPrice, fmtQty, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass, todaySg } from "@/lib/format";
 import { maxSellable, previewTrade } from "@/lib/position";
 import type { Prices } from "@/lib/price";
+import { CURRENCIES, CURRENCY_NAMES, type Currency } from "@/lib/currencies";
 import { tradeInputSchema, type Trade, type TradeInput } from "@/lib/trade-schema";
 import { AssetPicker } from "./asset-picker";
 import { Segmented } from "./segmented";
@@ -21,10 +22,10 @@ type FormValues = {
   asset: string;
   date: string;
   quantity: string;
-  currency: "USD" | "SGD";
+  currency: Currency;
   mode: "total" | "price";
   amount: string; // total or price per unit, in `currency`
-  fx: string; // USD per SGD
+  fx: string; // units of `currency` per 1 USD, as rates are usually quoted
   fee: string; // in `currency`
   note: string;
 };
@@ -33,23 +34,32 @@ type Field = keyof FormValues;
 
 const num = (s: string) => (s.trim() === "" ? Number.NaN : Number(s.replace(/,/g, "")));
 const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
+const sig = (n: number, digits: number) => Number(n.toPrecision(digits));
 
-function toInput(v: FormValues): TradeInput {
-  const sol = num(v.quantity);
+/**
+ * `original` is the trade being edited: if its amount and rate weren't touched, its
+ * stored USD total is kept exactly rather than recomputed through a rounded rate.
+ */
+function toInput(v: FormValues, original: { values: FormValues; trade: Trade } | null): TradeInput {
+  const qty = num(v.quantity);
   const amount = num(v.amount);
-  const fx = v.currency === "SGD" ? num(v.fx) : 1;
-  const quoteTotal = v.mode === "total" ? amount : amount * sol;
+  const foreign = v.currency !== "USD";
+  const usdPerUnit = foreign ? 1 / num(v.fx) : 1;
+  const quoteTotal = v.mode === "total" ? amount : amount * qty;
   const fee = v.fee.trim() === "" ? 0 : num(v.fee);
+  const o = original?.values;
+  const untouched =
+    o && v.mode === "total" && v.currency === o.currency && v.amount === o.amount && v.fx === o.fx;
   return {
     date: v.date,
     asset: v.asset.trim().toUpperCase(),
     side: v.side,
-    quantity: sol,
-    total_usd: round(quoteTotal * fx, 6),
-    fee_usd: round(fee * fx, 6),
+    quantity: qty,
+    total_usd: untouched ? original!.trade.total_usd : round(quoteTotal * usdPerUnit, 6),
+    fee_usd: round(fee * usdPerUnit, 6),
     quote_currency: v.currency,
-    quote_amount: v.currency === "SGD" ? round(quoteTotal, 6) : null,
-    fx_usd_per_quote: v.currency === "SGD" ? fx : null,
+    quote_amount: foreign ? round(quoteTotal, 6) : null,
+    fx_usd_per_quote: foreign ? (untouched ? original!.trade.fx_usd_per_quote : sig(usdPerUnit, 10)) : null,
     note: v.note.trim() || null,
   };
 }
@@ -66,13 +76,29 @@ const FIELD_FOR: Record<string, Field> = {
   note: "note",
 };
 
-function defaults(editing: Trade | null, defaultAsset: string, prices: Prices): FormValues {
-  const liveFx = prices.usdPerSgd ? String(round(prices.usdPerSgd, 6)) : "";
+/** Live rate for a currency as units per 1 USD, or "" if unknown. */
+function liveRate(prices: Prices, c: Currency) {
+  const usdPer = prices.usdPer[c];
+  return c !== "USD" && usdPer ? String(sig(1 / usdPer, 6)) : "";
+}
+
+function defaults(editing: Trade | null, defaultAsset: string, defaultCurrency: Currency, prices: Prices): FormValues {
   if (!editing) {
-    return { side: "buy", asset: defaultAsset, date: todaySg(), quantity: "", currency: "USD", mode: "total", amount: "", fx: liveFx, fee: "", note: "" };
+    return {
+      side: "buy",
+      asset: defaultAsset,
+      date: todaySg(),
+      quantity: "",
+      currency: defaultCurrency,
+      mode: "total",
+      amount: "",
+      fx: liveRate(prices, defaultCurrency),
+      fee: "",
+      note: "",
+    };
   }
-  const sgd = editing.quote_currency === "SGD";
-  const fx = sgd ? (editing.fx_usd_per_quote ?? 1) : 1;
+  const foreign = editing.quote_currency !== "USD" && editing.fx_usd_per_quote != null;
+  const usdPerUnit = foreign ? editing.fx_usd_per_quote! : 1;
   return {
     side: editing.side,
     asset: editing.asset,
@@ -80,9 +106,9 @@ function defaults(editing: Trade | null, defaultAsset: string, prices: Prices): 
     quantity: String(editing.quantity),
     currency: editing.quote_currency,
     mode: "total",
-    amount: String(sgd ? (editing.quote_amount ?? editing.total_usd / fx) : editing.total_usd),
-    fx: sgd ? String(fx) : liveFx,
-    fee: editing.fee_usd ? String(round(editing.fee_usd / fx, 2)) : "",
+    amount: String(foreign ? (editing.quote_amount ?? editing.total_usd / usdPerUnit) : editing.total_usd),
+    fx: foreign ? String(sig(1 / usdPerUnit, 8)) : "",
+    fee: editing.fee_usd ? String(round(editing.fee_usd / usdPerUnit, 2)) : "",
     note: editing.note ?? "",
   };
 }
@@ -102,16 +128,23 @@ export function TradeForm({
   knownAssets: string[];
   onDone: () => void;
 }) {
+  // New trades default to the currency of the user's most recent trade.
+  const lastCurrency = [...trades].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.quote_currency ?? "USD";
+  const [initial] = useState(() => defaults(editing, defaultAsset, lastCurrency, prices));
   const { register, control, setValue, handleSubmit, setError, clearErrors, formState } = useForm<FormValues>({
-    defaultValues: defaults(editing, defaultAsset, prices),
+    defaultValues: initial,
   });
+  const original = editing ? { values: initial, trade: editing } : null;
   const [saving, startSaving] = useTransition();
   const [draftCreatedAt] = useState(() => new Date().toISOString());
   const v = useWatch({ control }) as FormValues;
-  const cur = v.currency === "SGD" ? "S$" : "$";
-  const input = toInput(v);
+  const foreign = v.currency !== "USD";
+  const cur = foreign ? v.currency : "$";
+  const money = (n: number) =>
+    foreign ? fmtMoney(n, v.currency) : `$${round(n, 4).toLocaleString("en-US")}`;
+  const input = toInput(v, original);
   const sol = input.quantity;
-  const quoteTotal = v.currency === "SGD" ? input.quote_amount! : input.total_usd;
+  const quoteTotal = foreign ? input.quote_amount! : input.total_usd;
   const hasAmounts = sol > 0 && input.total_usd > 0;
   const asset = input.asset;
   const assetKnown = knownAssets.length === 0 || knownAssets.includes(asset);
@@ -137,7 +170,7 @@ export function TradeForm({
   };
 
   const onSubmit = handleSubmit((values) => {
-    const parsed = tradeInputSchema.safeParse(toInput(values));
+    const parsed = tradeInputSchema.safeParse(toInput(values, original));
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const field = FIELD_FOR[String(issue.path[0])] ?? "amount";
@@ -201,16 +234,26 @@ export function TradeForm({
           {err("date") && <p className="text-xs text-loss">{err("date")}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label>Currency</Label>
-          <Segmented
-            label="Currency"
+          <Label htmlFor="currency">Currency</Label>
+          {/* Native select: the phone's own picker is the best UI for a long list. */}
+          <select
+            id="currency"
             value={v.currency}
-            onChange={(c) => setValue("currency", c)}
-            options={[
-              { value: "USD", label: "USD" },
-              { value: "SGD", label: "SGD" },
-            ]}
-          />
+            onChange={(e) => {
+              const c = e.target.value as Currency;
+              setValue("currency", c);
+              // Switching currency: use the trade's own rate when editing it back, else the live rate.
+              setValue("fx", original && c === original.values.currency ? original.values.fx : liveRate(prices, c));
+              clearErrors(["fx", "amount"]);
+            }}
+            className="h-11 w-full rounded-lg border border-input bg-transparent px-3 text-base dark:bg-input/30"
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c} · {CURRENCY_NAMES[c]}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -251,7 +294,7 @@ export function TradeForm({
         </div>
         <div className="relative">
           <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">{cur}</span>
-          <Input id="amount" placeholder="0.00" {...decimal} className={cn(decimal.className, v.currency === "SGD" ? "pl-9" : "pl-7")} {...reg("amount")} aria-invalid={!!err("amount")} />
+          <Input id="amount" placeholder="0.00" {...decimal} className={cn(decimal.className, foreign ? "pl-14" : "pl-7")} {...reg("amount")} aria-invalid={!!err("amount")} />
         </div>
         {err("amount") ? (
           <p className="text-xs text-loss">{err("amount")}</p>
@@ -259,23 +302,43 @@ export function TradeForm({
           hasAmounts && (
             <p className="text-xs tabular-nums text-muted-foreground">
               {v.mode === "total"
-                ? `= ${cur}${round(quoteTotal / sol, 4).toLocaleString("en-US")} per ${asset}`
-                : `= ${cur}${round(quoteTotal, 2).toLocaleString("en-US")} total`}
+                ? `= ${money(quoteTotal / sol)} per ${asset}`
+                : `= ${money(quoteTotal)} total`}
               {" · net of fees"}
             </p>
           )
         )}
       </div>
 
-      {v.currency === "SGD" && (
+      {foreign && (
         <div className="space-y-1.5">
-          <Label htmlFor="fx">FX rate (USD per 1 SGD)</Label>
-          <Input id="fx" placeholder="0.78" {...decimal} {...reg("fx")} aria-invalid={!!err("fx")} />
+          <Label htmlFor="fx">Exchange rate</Label>
+          <div className="relative">
+            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+              1 USD =
+            </span>
+            <Input
+              id="fx"
+              placeholder={liveRate(prices, v.currency) || "0"}
+              {...decimal}
+              className={cn(decimal.className, "pr-14 pl-[4.25rem]")}
+              {...reg("fx")}
+              aria-invalid={!!err("fx")}
+            />
+            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+              {v.currency}
+            </span>
+          </div>
           {err("fx") ? (
             <p className="text-xs text-loss">{err("fx")}</p>
           ) : (
             <p className="text-xs tabular-nums text-muted-foreground">
-              {hasAmounts ? `= ${fmtUsd(input.total_usd)} USD` : "Pre-filled from the live rate; edit to match your fill."}
+              {hasAmounts ? `= ${fmtUsd(input.total_usd)} USD · ` : ""}
+              {original && v.currency === original.values.currency
+                ? "The rate saved with this trade."
+                : liveRate(prices, v.currency)
+                  ? "Pre-filled from the live rate; edit to match your fill."
+                  : "Enter the rate you got."}
             </p>
           )}
         </div>

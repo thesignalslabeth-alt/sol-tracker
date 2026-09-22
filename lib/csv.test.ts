@@ -86,3 +86,35 @@ test("fingerprints are stable so re-imports can be de-duplicated", () => {
   assert.ok(a.format && b.format);
   if (a.format && b.format) assert.equal(a.rows[0].fingerprint, b.rows[0].fingerprint);
 });
+
+test("any supported currency imports, and the old fx_usd_per_sgd column still works", () => {
+  const res = parseTradesCsv(
+    [
+      "date,asset,side,quantity,total,currency,fx_usd_per_quote,total_usd,fee,note",
+      "2026-09-02,BTC,buy,0.01,3480,MYR,0.2451,,,",
+      "2026-09-03,ETH,buy,1,45000000,IDR,0.0000559,,,",
+      "2026-09-04,SOL,buy,1,100,EUR,1.1,,,",
+    ].join("\n"),
+  );
+  assert.equal(res.format, "template");
+  if (res.format !== "template") return;
+  close(res.rows[0].input!.total_usd, 3480 * 0.2451, "MYR converted");
+  assert.equal(res.rows[0].input!.quote_currency, "MYR");
+  close(res.rows[1].input!.total_usd, 45000000 * 0.0000559, "IDR converted");
+  assert.ok(res.rows[2].error, "unsupported currency rejected");
+
+  const legacy = parseTradesCsv("date,asset,side,quantity,total,currency,fx_usd_per_sgd\n2026-08-27,SOL,sell,33,4270,SGD,0.786782");
+  assert.ok(legacy.format === "template" && legacy.rows[0].input);
+  if (legacy.format === "template") close(legacy.rows[0].input!.total_usd, 4270 * 0.786782, "legacy SGD column");
+});
+
+test("MYR trades round-trip through export", () => {
+  const t: Trade = { id: "m", date: "2026-09-02", asset: "BTC", side: "buy", quantity: 0.01, total_usd: 852.95, fee_usd: 0, quote_currency: "MYR", quote_amount: 3480, fx_usd_per_quote: 0.2451, note: null, created_at: "2026-09-02T00:00:00Z" };
+  const res = parseTradesCsv(toTemplateCsv([t]));
+  assert.ok(res.format === "template");
+  if (res.format !== "template") return;
+  const back = res.rows[0].input!;
+  assert.equal(back.quote_currency, "MYR");
+  assert.equal(back.quote_amount, 3480);
+  close(back.total_usd, 852.95, "exact USD total kept");
+});

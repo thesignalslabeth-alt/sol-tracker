@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon, PlusIcon, UploadIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fmtPrice } from "@/lib/format";
@@ -50,6 +51,11 @@ export function DashboardHeader({
             Stale
           </Badge>
         )}
+        <Button variant="ghost" size="icon-lg" className="size-10" asChild>
+          <Link href="/about" aria-label="About Trade Tracker" title="About">
+            <InfoIcon />
+          </Link>
+        </Button>
         <Button variant="ghost" size="icon-lg" className="size-10" onClick={onImport} aria-label="Import CSV" title="Import CSV">
           <UploadIcon />
         </Button>
@@ -65,7 +71,12 @@ export function DashboardHeader({
         </Button>
         {showUserButton && (
           <div className="ml-1 flex size-10 items-center justify-center">
-            <UserButton />
+            {/* The About page is also reachable from the account menu. */}
+            <UserButton>
+              <UserButton.MenuItems>
+                <UserButton.Link label="About Trade Tracker" labelIcon={<InfoIcon className="size-4" />} href="/about" />
+              </UserButton.MenuItems>
+            </UserButton>
           </div>
         )}
       </div>

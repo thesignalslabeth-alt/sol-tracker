@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { neon } from "@neondatabase/serverless";
+import { CURRENCIES } from "../lib/currencies.ts";
 import type { Trade } from "../lib/trade-schema.ts";
 
 const url = process.env.DATABASE_URL;
@@ -28,6 +29,10 @@ await sql`
 // Neon's HTTP driver runs one statement per query.
 const schema = readFileSync(join(process.cwd(), "db/schema.sql"), "utf8");
 for (const stmt of schema.split(";").map((s) => s.trim()).filter(Boolean)) await sql.query(stmt);
+// Allowed trade currencies follow lib/currencies.ts.
+const currencyList = CURRENCIES.map((c) => `'${c}'`).join(", ");
+await sql`alter table trades drop constraint if exists trades_quote_currency_check`;
+await sql.query(`alter table trades add constraint trades_quote_currency_check check (quote_currency in (${currencyList}))`);
 const claimed = await sql`update trades set user_id = ${userId} where user_id is null returning id`;
 await sql`alter table trades alter column user_id set not null`;
 await sql`create index if not exists trades_user_id_idx on trades (user_id)`;

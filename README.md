@@ -34,11 +34,13 @@ re-averaging, oversell and back-dated-sell cases.
 
 Tap **Add trade** (bottom of the screen on mobile, top right on desktop):
 
-1. Pick **Buy** or **Sell**, the asset (suggestions come from Binance), the date and the currency.
+1. Pick **Buy** or **Sell**, the asset (search by symbol or name), the date and the currency:
+   USD, SGD, MYR, IDR, THB, PHP, VND, HKD, JPY, KRW, CNY, TWD or INR.
 2. Enter the SOL amount and either the **total** or the **price per SOL**, net of fees.
    For sells, **Max** fills the most you can sell on that date.
-3. For **SGD**, the FX rate (USD per 1 SGD) is pre-filled from the live rate; change it to
-   match your actual fill. Example: sold 33 SOL for S$4,270 at 0.786782 → $3,359.56.
+3. For non-USD trades, the exchange rate (e.g. 1 USD = 4.08 MYR) is pre-filled from the live
+   rate; change it to match your actual fill. Everything is converted to USD for the math,
+   and the original amount is kept. Example: sold 33 SOL for SGD 4,270 at 1 USD = 1.2710 SGD → $3,359.56.
 4. Check the preview ("Avg cost $72.47 → $77.98", or "Realizes +$660.66"), then save.
 
 Each signed-in user has their own ledger: a new user starts empty and can never see
@@ -53,8 +55,9 @@ Tap the upload icon in the header:
   stablecoin (USDT, USDC, FDUSD…) are imported; others (e.g. ETH/BTC) are listed as
   errors and skipped. Fees paid in the traded coin or the stablecoin are applied;
   fees paid in BNB are flagged but not included in cost basis.
-- **Template:** `date,asset,side,quantity,total,currency,fx_usd_per_sgd,total_usd,fee,note`
-  (download it from the import sheet).
+- **Template:** `date,asset,side,quantity,total,currency,fx_usd_per_quote,total_usd,fee,note`
+  (download it from the import sheet). `total` and `fee` are in `currency`;
+  `fx_usd_per_quote` is USD per 1 unit of it (older files with `fx_usd_per_sgd` still import).
 
 You see a preview of every row before anything is saved. Imports are all-or-nothing
 (rejected if they'd oversell) and re-importing the same file skips rows already present.
@@ -97,7 +100,8 @@ app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
 lib/position.ts              pure position math (+ tests)
 lib/trades-repo.ts           storage interface → lib/repo/{json,postgres}.ts
-lib/price.ts                 Binance prices (60s cache) + USD/SGD rate, stale fallback
+lib/price.ts                 Binance prices (60s cache) + fiat rates, stale fallback
+lib/currencies.ts            supported trade currencies
 lib/csv.ts                   CSV parsing (template + Binance) and export (+ tests)
 lib/auth.ts                  Clerk allowlist check
 components/dashboard/        metric cards, charts, trade history

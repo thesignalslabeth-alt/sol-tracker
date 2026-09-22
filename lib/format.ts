@@ -1,11 +1,17 @@
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const usdCompact = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 });
-const sgd = new Intl.NumberFormat("en-SG", { style: "currency", currency: "SGD", currencyDisplay: "code", maximumFractionDigits: 2 });
+
 const qty = new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 });
 
 export const fmtUsd = (n: number) => usd.format(n);
 export const fmtUsdCompact = (n: number) => (Math.abs(n) >= 10_000 ? usdCompact.format(n) : usd.format(n));
-export const fmtSgd = (n: number) => sgd.format(n);
+/** Amount in any trade currency, e.g. "MYR 4,080.00", "IDR 1,789,511" (Intl picks the decimals). */
+export const fmtMoney = (n: number, currency: string) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency, currencyDisplay: "code" }).format(n);
+
+/** Exchange rate as people quote it: units of `currency` per 1 USD. */
+export const fmtRate = (usdPerUnit: number) =>
+  new Intl.NumberFormat("en-US", { maximumSignificantDigits: 6 }).format(1 / usdPerUnit);
 export const fmtQtyNum = (n: number) => qty.format(n);
 export const fmtQty = (n: number, asset: string) => `${qty.format(n)} ${asset}`;
 

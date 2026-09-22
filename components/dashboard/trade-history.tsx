@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { fmtDate, fmtPrice, fmtQty, fmtQtyNum, fmtSgd, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass } from "@/lib/format";
+import { fmtDate, fmtPrice, fmtQty, fmtMoney, fmtQtyNum, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass } from "@/lib/format";
 import { sortTrades, type AssetPosition, type SaleResult } from "@/lib/position";
 import type { Trade } from "@/lib/trade-schema";
 
@@ -126,7 +126,7 @@ export function TradeHistory({
                   </p>
                   <p className="text-sm tabular-nums text-muted-foreground">
                     {fmtUsd(t.total_usd)}
-                    {t.quote_currency === "SGD" && t.quote_amount != null && ` · ${fmtSgd(t.quote_amount)}`}
+                    {t.quote_currency !== "USD" && t.quote_amount != null && ` · ${fmtMoney(t.quote_amount, t.quote_currency)}`}
                   </p>
                   {t.side === "sell" && (
                     <p className="text-sm">
@@ -178,8 +178,8 @@ export function TradeHistory({
                   <TableCell className="text-right tabular-nums">{fmtPrice(t.total_usd / t.quantity)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {fmtUsd(t.total_usd)}
-                    {t.quote_currency === "SGD" && t.quote_amount != null && (
-                      <div className="text-xs text-muted-foreground">{fmtSgd(t.quote_amount)}</div>
+                    {t.quote_currency !== "USD" && t.quote_amount != null && (
+                      <div className="text-xs text-muted-foreground">{fmtMoney(t.quote_amount, t.quote_currency)}</div>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
