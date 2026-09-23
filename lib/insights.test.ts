@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildInsights, type Insight } from "./insights";
+import { buildInsights, CAPITAL_PRESERVATION, type Insight } from "./insights";
 import { positionsByAsset } from "./position";
 import type { Trade } from "./trade-schema";
 
@@ -56,6 +56,15 @@ test("a position worth 2x its remaining cost shows how much sells to get that co
   assert.match(i.detail, /10 SOL at \$300\.00 is \$3,000\.00, against \$1,000\.00 of cost\./);
   assert.match(i.detail, /Selling 3\.33333333 SOL at today's price returns that \$1,000\.00/);
   assert.match(i.detail, /leaving 6\.66666667 SOL held at no remaining cost/);
+  assert.equal(i.highlight, true, "the 2x insight leads the panel");
+});
+
+test("the capital-preservation note explains the idea without telling anyone to sell", () => {
+  assert.match(CAPITAL_PRESERVATION, /^Capital preservation: /);
+  const text = CAPITAL_PRESERVATION.toLowerCase();
+  for (const word of ["you should", "we recommend", "take profit now"]) {
+    assert.ok(!text.includes(word), `the note must not say "${word}"`);
+  }
 });
 
 test("below 2x there is no such insight, and a part-sold position uses cost still in it", () => {

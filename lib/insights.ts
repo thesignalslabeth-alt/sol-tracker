@@ -10,7 +10,15 @@ export type Insight = {
   title: string;
   detail: string;
   tone: "neutral" | "gain" | "loss";
+  /** Shown in the callout at the top of the panel rather than the plain list. */
+  highlight?: boolean;
 };
+
+/** The idea behind the 2x callout, stated once and named, so it isn't a bare number. */
+export const CAPITAL_PRESERVATION =
+  "Capital preservation: selling just enough to take your original stake back out, so the money you " +
+  "started with is yours again and only profit stays in the market. It's a common way to cap the " +
+  "downside on a position that has run up. Whether it suits you is your call.";
 
 /** A position worth this multiple of the money still in it gets the "cost back out" arithmetic. */
 const DOUBLE = 2;
@@ -70,8 +78,9 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
       detail:
         `${trim(qty)} ${p.asset} at ${price(p.price)} is ${usd(unrealizedValue)}, against ${usd(remainingCostBasis)} of cost. ` +
         `Selling ${trim(round8(toRecover))} ${p.asset} at today's price returns that ${usd(remainingCostBasis)}, ` +
-        `leaving ${trim(round8(qty - toRecover))} ${p.asset} held at no remaining cost. Your call — this is just the arithmetic.`,
+        `leaving ${trim(round8(qty - toRecover))} ${p.asset} held at no remaining cost.`,
       tone: "gain",
+      highlight: true,
     });
   }
 
