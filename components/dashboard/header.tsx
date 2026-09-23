@@ -1,8 +1,10 @@
 "use client";
 
+import { useTransition } from "react";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { DownloadIcon, InfoIcon, PlusIcon, UploadIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon, LightbulbIcon, PlusIcon, UploadIcon } from "lucide-react";
+import { setInsightsEnabled } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fmtPrice } from "@/lib/format";
@@ -18,6 +20,7 @@ export function DashboardHeader({
   onImport,
   canExport,
   showUserButton,
+  insightsOn,
 }: {
   current: AssetPosition | null;
   assetCount: number;
@@ -27,7 +30,11 @@ export function DashboardHeader({
   onImport: () => void;
   canExport: boolean;
   showUserButton: boolean;
+  insightsOn: boolean;
 }) {
+  const [pending, startTransition] = useTransition();
+  // In a transition so the dashboard re-renders with the new setting straight away.
+  const toggleInsights = () => startTransition(() => void setInsightsEnabled(!insightsOn));
   const updated = new Date(prices.fetchedAt ?? renderedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const subtitle = current
     ? current.price != null
@@ -69,12 +76,32 @@ export function DashboardHeader({
         <Button className="ml-1 hidden md:inline-flex" onClick={onAdd}>
           <PlusIcon /> Add trade
         </Button>
+        {!showUserButton && (
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            className="size-10"
+            onClick={toggleInsights}
+            disabled={pending}
+            aria-pressed={insightsOn}
+            aria-label={insightsOn ? "Hide insights" : "Show insights"}
+            title={insightsOn ? "Hide insights" : "Show insights"}
+          >
+            <LightbulbIcon />
+          </Button>
+        )}
         {showUserButton && (
           <div className="ml-1 flex size-10 items-center justify-center">
             {/* The About page is also reachable from the account menu. */}
             <UserButton>
               <UserButton.MenuItems>
                 <UserButton.Link label="About Trade Tracker" labelIcon={<InfoIcon className="size-4" />} href="/about" />
+                {/* Insights are opt-in: nothing about them shows on the dashboard until this is on. */}
+                <UserButton.Action
+                  label={insightsOn ? "Hide insights" : "Show insights"}
+                  labelIcon={<LightbulbIcon className="size-4" />}
+                  onClick={toggleInsights}
+                />
               </UserButton.MenuItems>
             </UserButton>
           </div>

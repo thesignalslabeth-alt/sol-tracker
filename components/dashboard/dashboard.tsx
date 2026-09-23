@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImportSheet } from "@/components/import/import-sheet";
 import { TradeFormSheet } from "@/components/trade-form/trade-form-sheet";
+import type { Insight } from "@/lib/insights";
 import type { AssetPosition } from "@/lib/position";
 import type { Prices } from "@/lib/price";
 import type { Trade } from "@/lib/trade-schema";
 import { AssetAllocationChart, PortfolioAllocationChart } from "./allocation-charts";
 import { AssetSwitcher } from "./asset-switcher";
 import { DashboardHeader } from "./header";
+import { InsightsCard } from "./insights-card";
 import { MetricCards } from "./metric-cards";
 import { PLWaterfallChart } from "./pl-waterfall-chart";
 import { PortfolioOverview } from "./portfolio-overview";
@@ -26,6 +28,8 @@ export type DashboardProps = {
   prices: Prices;
   knownAssets: string[];
   renderedAt: string;
+  /** null when the user hasn't opted in: the panel and its controls stay hidden. */
+  insights: Insight[] | null;
   authBypassed: boolean;
   showUserButton: boolean;
 };
@@ -37,6 +41,7 @@ export function Dashboard({
   prices,
   knownAssets,
   renderedAt,
+  insights,
   authBypassed,
   showUserButton,
 }: DashboardProps) {
@@ -74,10 +79,12 @@ export function Dashboard({
         onImport={() => setImportOpen(true)}
         canExport={trades.length > 0}
         showUserButton={showUserButton}
+        insightsOn={insights != null}
       />
       {positions.length > 1 && <AssetSwitcher assets={positions.map((p) => p.asset)} selected={selected} />}
 
       <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-4 md:space-y-6 md:px-6 md:py-6">
+        {insights && <InsightsCard insights={insights} />}
         {positions.length === 0 ? (
           <EmptyState onAdd={openAdd} onImport={() => setImportOpen(true)} />
         ) : current ? (

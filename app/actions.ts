@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { AuthError, requireOwner } from "@/lib/auth";
 import { OversellError, validateLedger } from "@/lib/position";
+import { getPrefsRepo } from "@/lib/prefs-repo";
 import { getPrices } from "@/lib/price";
 import { normalizeInput, tradeInputSchema, type Trade } from "@/lib/trade-schema";
 import { getTradesRepo } from "@/lib/trades-repo";
@@ -122,5 +123,14 @@ export async function importTrades(rows: ImportRow[]): Promise<ImportResult> {
     validateLedger([...existing, ...fresh]);
     const inserted = await repo.createMany(userId, fresh);
     return { ok: true as const, inserted, skipped: rows.length - inserted };
+  });
+}
+
+/** Turns the insights panel on or off for the signed-in user. Off by default. */
+export async function setInsightsEnabled(enabled: boolean): Promise<ActionResult> {
+  return run(async (userId) => {
+    const prefs = await getPrefsRepo();
+    await prefs.set(userId, { ...(await prefs.get(userId)), insights: Boolean(enabled) });
+    return { ok: true as const };
   });
 }

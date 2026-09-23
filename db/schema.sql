@@ -16,3 +16,10 @@ create table if not exists trades (
 );
 
 create index if not exists trades_user_id_idx on trades (user_id);
+
+-- Per-user settings. A missing row means defaults: everything opt-in is off.
+create table if not exists user_prefs (
+  user_id    text primary key,
+  insights   boolean not null default false,
+  updated_at timestamptz not null default now()
+);

@@ -1,6 +1,7 @@
 import "server-only";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_PREFS, type Prefs, type PrefsRepo } from "../prefs-repo";
 import type { Trade } from "../trade-schema";
 import type { TradesRepo } from "../trades-repo";
 
@@ -53,5 +54,31 @@ export class JsonTradesRepo implements TradesRepo {
     const tmp = `${FILE}.tmp`;
     await writeFile(tmp, JSON.stringify(trades, null, 2) + "\n");
     await rename(tmp, FILE);
+  }
+}
+
+const PREFS_FILE = path.join(process.cwd(), "data/prefs.json");
+
+/** Local-dev settings store backed by data/prefs.json (created on first write). */
+export class JsonPrefsRepo implements PrefsRepo {
+  async get(userId: string): Promise<Prefs> {
+    return { ...DEFAULT_PREFS, ...(await this.readAll())[userId] };
+  }
+
+  async set(userId: string, prefs: Prefs) {
+    const all = await this.readAll();
+    all[userId] = prefs;
+    const tmp = `${PREFS_FILE}.tmp`;
+    await writeFile(tmp, JSON.stringify(all, null, 2) + "\n");
+    await rename(tmp, PREFS_FILE);
+  }
+
+  private async readAll(): Promise<Record<string, Prefs>> {
+    try {
+      return JSON.parse(await readFile(PREFS_FILE, "utf8"));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw e;
+    }
   }
 }

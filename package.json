@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "db:seed": "node --import tsx scripts/db-seed.mts",
+    "db:migrate": "node --import tsx scripts/db-migrate.mts",
     "dev:lan": "next dev",
     "db:migrate-users": "node --import tsx scripts/migrate-user-ids.mts"
   },

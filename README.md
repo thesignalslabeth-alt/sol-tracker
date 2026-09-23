@@ -53,6 +53,15 @@ Each signed-in user has their own ledger: a new user starts empty and can never 
 anyone else's trades. Every add, edit and delete re-checks the whole ledger, so a sell can never end up larger
 than what you held at that date.
 
+## Insights (opt-in)
+
+Off by default, and nothing about it appears on the dashboard until it's switched on
+from the account menu ("Show insights"). When on, a panel lists plain facts worked out
+from that user's own trades: how concentrated the holdings are, how much profit is
+banked versus on paper, cost basis against the live price, fees paid, coins fully sold,
+and whether the ledger has gone a month without an entry. It never suggests buying or
+selling. The setting lives in `user_prefs` and is per user.
+
 ## Importing and exporting CSV
 
 Tap the upload icon in the header:
@@ -95,7 +104,11 @@ Vercel's filesystem is read-only, so production uses Postgres:
    ```bash
    DATABASE_URL="postgres://..." SEED_USER_ID="user_..." npm run db:seed
    ```
-4. Before deploying, check `vercel whoami` shows the right team, and that commits are
+4. After a schema change, apply it (create-only, no data touched):
+   ```bash
+   DATABASE_URL="postgres://..." npm run db:migrate
+   ```
+5. Before deploying, check `vercel whoami` shows the right team, and that commits are
    authored by the account that's a member of it.
 
 ## Layout
@@ -105,6 +118,8 @@ app/page.tsx                 dashboard (server component)
 app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
 lib/position.ts              pure position math (+ tests)
+lib/insights.ts              opt-in observations about your own ledger (+ tests)
+lib/prefs-repo.ts            per-user settings (insights on/off), same store as trades
 lib/trades-repo.ts           storage interface → lib/repo/{json,postgres}.ts
 lib/price.ts                 Binance prices (60s cache) + fiat rates, stale fallback
 lib/currencies.ts            supported trade currencies

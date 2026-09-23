@@ -1,5 +1,6 @@
 import "server-only";
 import { neon } from "@neondatabase/serverless";
+import { DEFAULT_PREFS, type Prefs, type PrefsRepo } from "../prefs-repo";
 import type { Trade } from "../trade-schema";
 import type { TradesRepo } from "../trades-repo";
 
@@ -82,5 +83,26 @@ export class PostgresTradesRepo implements TradesRepo {
 
   async remove(userId: string, id: string) {
     await this.sql`delete from trades where id = ${id} and user_id = ${userId}`;
+  }
+}
+
+/** Production store for per-user settings. Missing row = defaults (everything off). */
+export class PostgresPrefsRepo implements PrefsRepo {
+  private sql = (() => {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error("DATABASE_URL is not set");
+    return neon(url);
+  })();
+
+  async get(userId: string): Promise<Prefs> {
+    const rows = await this.sql`select insights from user_prefs where user_id = ${userId}`;
+    const row = rows[0] as { insights: boolean } | undefined;
+    return row ? { insights: row.insights } : { ...DEFAULT_PREFS };
+  }
+
+  async set(userId: string, prefs: Prefs) {
+    await this.sql`
+      insert into user_prefs (user_id, insights) values (${userId}, ${prefs.insights})
+      on conflict (user_id) do update set insights = excluded.insights, updated_at = now()`;
   }
 }

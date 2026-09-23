@@ -4,6 +4,9 @@ import { Dashboard } from "@/components/dashboard/dashboard";
 import { AccessRequest } from "@/components/dashboard/access-request";
 import { NoticeScreen } from "@/components/dashboard/notice-screen";
 import { getViewer } from "@/lib/auth";
+import { todaySg } from "@/lib/format";
+import { buildInsights } from "@/lib/insights";
+import { getPrefsRepo } from "@/lib/prefs-repo";
 import { allowedUserIds, clerkConfigured } from "@/lib/auth-config";
 import { OversellError, positionsByAsset } from "@/lib/position";
 import { getPrices } from "@/lib/price";
@@ -30,10 +33,11 @@ export default async function Page({ searchParams }: PageProps<"/">) {
     );
   }
 
-  const [{ asset: requested }, prices, trades] = await Promise.all([
+  const [{ asset: requested }, prices, trades, prefs] = await Promise.all([
     searchParams,
     getPrices(),
     getTradesRepo().then((r) => r.list(viewer.userId)),
+    getPrefsRepo().then((r) => r.get(viewer.userId)),
   ]);
 
   let positions;
@@ -59,6 +63,7 @@ export default async function Page({ searchParams }: PageProps<"/">) {
       prices={prices}
       knownAssets={Object.keys(prices.usd).sort()}
       renderedAt={new Date().toISOString()}
+      insights={prefs.insights ? buildInsights({ trades, positions, today: todaySg() }) : null}
       authBypassed={viewer.status === "bypassed"}
       showUserButton={clerkConfigured}
     />
