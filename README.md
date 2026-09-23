@@ -90,20 +90,69 @@ removes units at the current average and leaves the average unchanged. Each asse
 
 1. Create an application in the Clerk dashboard and copy its keys into `.env.local`
    (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`).
-2. Optional: restrict who can use the app with `ALLOWED_USER_IDS` (comma-separated).
-   Leave it empty to let anyone who signs in use it with their own empty ledger.
-   Someone who isn't on a non-empty list sees **Not authorized** with their user ID.
+2. Restrict who can use the app with [`config/allowlist.ts`](config/allowlist.ts) and/or
+   `ALLOWED_USER_IDS` — see **Who can sign in** below.
 3. Set `SEED_USER_ID` to your ID so the committed seed trades show up as yours locally.
 
 Every server action and API route calls `requireOwner()` (`lib/auth.ts`), which returns
 the signed-in user's ID; all storage calls are scoped by it.
+
+## Who can sign in
+
+The app is invite-only by user ID. Two sources, and **both** are honoured — the ID needs
+to be in either one, not both:
+
+| Source | Use it for |
+|---|---|
+| `config/allowlist.ts` | the real list. Committed, reviewable, deploys on push. |
+| `ALLOWED_USER_IDS` env var (comma-separated) | local dev, and patching production in a hurry. |
+
+If both are empty, anyone who signs in gets in with their own empty ledger — the local-dev
+default, never what production should run on. Someone signed in but not listed sees
+**You're almost in**, which shows them their own user ID to send you.
+
+### Adding a user
+
+1. Get their Clerk **production** user ID. It's on the **You're almost in** screen they see
+   after signing in, or from the CLI:
+
+   ```bash
+   clerk users list --instance prod --mode agent
+   ```
+
+2. Add it to `ALLOWLIST` in [`config/allowlist.ts`](config/allowlist.ts), with a comment
+   saying who it is and the date:
+
+   ```ts
+   "user_3Jim…", // ki***@gmail.com, 2026-09-23
+   ```
+
+3. Commit and push to `main`. That's it — the push deploys, and they're in on the next load.
+
+   ```bash
+   git commit -am "Allow <who>" && git push
+   ```
+
+Removing someone is the same edit in reverse. Their trades stay in the database under their
+user ID; nothing is deleted.
+
+**Working locally:** the allowlist holds *production* IDs, so the dev Clerk instance issues
+you a different one. Sign in locally once, copy the ID off the **You're almost in** screen
+into `ALLOWED_USER_IDS` in `.env.local`, and you're in without editing the committed list.
+
+**Why not the env var alone:** `ALLOWED_USER_IDS` is stored sensitive on Vercel, so nothing
+can read it back — `vercel env pull` prints `[SENSITIVE]`. Every change meant rebuilding the
+whole list from Clerk and hoping it was complete. Note that `vercel env ls`'s age column
+shows when a var was *created*, not last changed; `vercel env ls production --json` has the
+real `updatedAt`.
 
 ## Deploying to Vercel
 
 Vercel's filesystem is read-only, so production uses Postgres:
 
 1. Add **Neon** from the Vercel Marketplace; it sets `DATABASE_URL`.
-2. Set `TRADES_STORE=postgres`, the Clerk keys and `ALLOWED_USER_IDS` in the project's env vars.
+2. Set `TRADES_STORE=postgres` and the Clerk keys in the project's env vars. Access comes from
+   `config/allowlist.ts`; `ALLOWED_USER_IDS` is only needed to add someone without a deploy.
 3. Create the table and load the seed data once (safe to re-run; it also migrates
    older tables to per-user rows):
    ```bash
@@ -122,6 +171,7 @@ Vercel's filesystem is read-only, so production uses Postgres:
 app/page.tsx                 dashboard (server component)
 app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
+config/allowlist.ts          who may sign in (committed; see "Who can sign in")
 lib/position.ts              pure position math (+ tests)
 lib/insights.ts              opt-in observations about your own ledger (+ tests)
 lib/prefs.ts                 per-user settings shape + bounds (client-safe)
