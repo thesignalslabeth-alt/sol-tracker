@@ -1,7 +1,8 @@
 import "server-only";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_PREFS, type Prefs, type PrefsRepo } from "../prefs-repo";
+import { clampThreshold, DEFAULT_PREFS, type Prefs } from "../prefs";
+import type { PrefsRepo } from "../prefs-repo";
 import type { Trade } from "../trade-schema";
 import type { TradesRepo } from "../trades-repo";
 
@@ -62,7 +63,8 @@ const PREFS_FILE = path.join(process.cwd(), "data/prefs.json");
 /** Local-dev settings store backed by data/prefs.json (created on first write). */
 export class JsonPrefsRepo implements PrefsRepo {
   async get(userId: string): Promise<Prefs> {
-    return { ...DEFAULT_PREFS, ...(await this.readAll())[userId] };
+    const stored = { ...DEFAULT_PREFS, ...(await this.readAll())[userId] };
+    return { ...stored, capitalThreshold: clampThreshold(stored.capitalThreshold) };
   }
 
   async set(userId: string, prefs: Prefs) {

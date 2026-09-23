@@ -1,12 +1,5 @@
 import "server-only";
-
-/** Per-user settings. Everything here is off until the user turns it on. */
-export type Prefs = {
-  /** Show the insights panel on the dashboard. */
-  insights: boolean;
-};
-
-export const DEFAULT_PREFS: Prefs = { insights: false };
+import type { Prefs } from "./prefs";
 
 export interface PrefsRepo {
   get(userId: string): Promise<Prefs>;

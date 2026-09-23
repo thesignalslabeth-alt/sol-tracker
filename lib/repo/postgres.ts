@@ -1,6 +1,7 @@
 import "server-only";
 import { neon } from "@neondatabase/serverless";
-import { DEFAULT_PREFS, type Prefs, type PrefsRepo } from "../prefs-repo";
+import { clampThreshold, DEFAULT_PREFS, type Prefs } from "../prefs";
+import type { PrefsRepo } from "../prefs-repo";
 import type { Trade } from "../trade-schema";
 import type { TradesRepo } from "../trades-repo";
 
@@ -95,14 +96,17 @@ export class PostgresPrefsRepo implements PrefsRepo {
   })();
 
   async get(userId: string): Promise<Prefs> {
-    const rows = await this.sql`select insights from user_prefs where user_id = ${userId}`;
-    const row = rows[0] as { insights: boolean } | undefined;
-    return row ? { insights: row.insights } : { ...DEFAULT_PREFS };
+    const rows = await this.sql`select insights, capital_threshold from user_prefs where user_id = ${userId}`;
+    const row = rows[0] as { insights: boolean; capital_threshold: unknown } | undefined;
+    if (!row) return { ...DEFAULT_PREFS };
+    return { insights: row.insights, capitalThreshold: clampThreshold(row.capital_threshold) };
   }
 
   async set(userId: string, prefs: Prefs) {
     await this.sql`
-      insert into user_prefs (user_id, insights) values (${userId}, ${prefs.insights})
-      on conflict (user_id) do update set insights = excluded.insights, updated_at = now()`;
+      insert into user_prefs (user_id, insights, capital_threshold)
+      values (${userId}, ${prefs.insights}, ${prefs.capitalThreshold})
+      on conflict (user_id) do update set insights = excluded.insights,
+        capital_threshold = excluded.capital_threshold, updated_at = now()`;
   }
 }

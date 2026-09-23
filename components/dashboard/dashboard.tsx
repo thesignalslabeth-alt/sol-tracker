@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ImportSheet } from "@/components/import/import-sheet";
 import { TradeFormSheet } from "@/components/trade-form/trade-form-sheet";
 import type { Insight } from "@/lib/insights";
+import type { Prefs } from "@/lib/prefs";
 import type { AssetPosition } from "@/lib/position";
 import type { Prices } from "@/lib/price";
 import type { Trade } from "@/lib/trade-schema";
@@ -14,6 +15,7 @@ import { AssetAllocationChart, PortfolioAllocationChart } from "./allocation-cha
 import { AssetSwitcher } from "./asset-switcher";
 import { DashboardHeader } from "./header";
 import { InsightsCard } from "./insights-card";
+import { SettingsSheet } from "./settings-sheet";
 import { MetricCards } from "./metric-cards";
 import { PLWaterfallChart } from "./pl-waterfall-chart";
 import { PortfolioOverview } from "./portfolio-overview";
@@ -28,8 +30,9 @@ export type DashboardProps = {
   prices: Prices;
   knownAssets: string[];
   renderedAt: string;
-  /** null when the user hasn't opted in: the panel and its controls stay hidden. */
+  /** null when the user hasn't opted in: the panel stays hidden. */
   insights: Insight[] | null;
+  prefs: Prefs;
   authBypassed: boolean;
   showUserButton: boolean;
 };
@@ -42,11 +45,13 @@ export function Dashboard({
   knownAssets,
   renderedAt,
   insights,
+  prefs,
   authBypassed,
   showUserButton,
 }: DashboardProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [editing, setEditing] = useState<Trade | null>(null);
   useAutoRefresh(60_000);
 
@@ -79,7 +84,7 @@ export function Dashboard({
         onImport={() => setImportOpen(true)}
         canExport={trades.length > 0}
         showUserButton={showUserButton}
-        insightsOn={insights != null}
+        onSettings={() => setSettingsOpen(true)}
       />
       {positions.length > 1 && <AssetSwitcher assets={positions.map((p) => p.asset)} selected={selected} />}
 
@@ -122,6 +127,8 @@ export function Dashboard({
         prices={prices}
         knownAssets={knownAssets}
       />
+      {/* Keyed on the saved settings so the form resets after a change made elsewhere. */}
+      <SettingsSheet key={`${prefs.insights}-${prefs.capitalThreshold}`} open={settingsOpen} onOpenChange={setSettingsOpen} prefs={prefs} />
       <ImportSheet open={importOpen} onOpenChange={setImportOpen} knownAssets={knownAssets} />
     </div>
   );

@@ -2,6 +2,7 @@
 // every line is a fact you could work out from the trade list by hand.
 // Deliberately never a recommendation to buy, sell or hold.
 import type { AssetPosition } from "./position";
+import { clampThreshold, DEFAULT_PREFS } from "./prefs";
 import { sortTrades } from "./position";
 import type { Trade } from "./trade-schema";
 
@@ -20,9 +21,6 @@ export const CAPITAL_PRESERVATION =
   "started with is yours again and only profit stays in the market. It's a common way to cap the " +
   "downside on a position that has run up. Whether it suits you is your call.";
 
-/** A position worth this multiple of the money still in it gets the "cost back out" arithmetic. */
-const DOUBLE = 2;
-
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -37,6 +35,11 @@ export type InsightInput = {
   positions: readonly AssetPosition[];
   /** Today in the user's timezone, YYYY-MM-DD. */
   today: string;
+  /**
+   * The user's own line: flag a holding once it's worth this multiple of the cost
+   * still in it. Defaults to 2 when the setting hasn't been touched.
+   */
+  threshold?: number;
 };
 
 /**
@@ -44,7 +47,8 @@ export type InsightInput = {
  * ledger. Value-based facts are skipped when a held asset has no live price, since
  * the totals would silently understate the portfolio.
  */
-export function buildInsights({ trades, positions, today }: InsightInput): Insight[] {
+export function buildInsights({ trades, positions, today, threshold }: InsightInput): Insight[] {
+  const multipleWanted = clampThreshold(threshold ?? DEFAULT_PREFS.capitalThreshold);
   if (trades.length === 0 || positions.length === 0) return [];
   const out: Insight[] = [];
 
@@ -64,13 +68,13 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 2. Positions worth twice their remaining cost, with the arithmetic for taking
+  // 2. Positions past the user's own multiple, with the arithmetic for taking
   // the original money back out. A calculation, not a suggestion to sell.
   for (const p of [...held].sort((a, b) => b.position.unrealizedValue - a.position.unrealizedValue)) {
     const { unrealizedValue, remainingCostBasis, held: qty } = p.position;
     if (p.price == null || remainingCostBasis <= 0) continue;
     const multiple = unrealizedValue / remainingCostBasis;
-    if (multiple < DOUBLE) continue;
+    if (multiple < multipleWanted) continue;
     const toRecover = Math.min(qty, remainingCostBasis / p.price);
     out.push({
       id: `doubled-${p.asset}`,

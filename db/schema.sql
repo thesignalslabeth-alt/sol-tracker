@@ -23,3 +23,6 @@ create table if not exists user_prefs (
   insights   boolean not null default false,
   updated_at timestamptz not null default now()
 );
+
+-- Added after user_prefs shipped: each user's own "worth N× its cost" line.
+alter table if exists user_prefs add column if not exists capital_threshold numeric(6, 2) not null default 2;

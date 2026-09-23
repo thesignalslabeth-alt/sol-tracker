@@ -63,7 +63,8 @@ export default async function Page({ searchParams }: PageProps<"/">) {
       prices={prices}
       knownAssets={Object.keys(prices.usd).sort()}
       renderedAt={new Date().toISOString()}
-      insights={prefs.insights ? buildInsights({ trades, positions, today: todaySg() }) : null}
+      prefs={prefs}
+      insights={prefs.insights ? buildInsights({ trades, positions, today: todaySg(), threshold: prefs.capitalThreshold }) : null}
       authBypassed={viewer.status === "bypassed"}
       showUserButton={clerkConfigured}
     />

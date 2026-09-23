@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { AuthError, requireOwner } from "@/lib/auth";
 import { OversellError, validateLedger } from "@/lib/position";
+import { clampThreshold } from "@/lib/prefs";
 import { getPrefsRepo } from "@/lib/prefs-repo";
 import { getPrices } from "@/lib/price";
 import { normalizeInput, tradeInputSchema, type Trade } from "@/lib/trade-schema";
@@ -123,6 +124,18 @@ export async function importTrades(rows: ImportRow[]): Promise<ImportResult> {
     validateLedger([...existing, ...fresh]);
     const inserted = await repo.createMany(userId, fresh);
     return { ok: true as const, inserted, skipped: rows.length - inserted };
+  });
+}
+
+/** Saves the settings sheet: insights on/off and the user's own capital-preservation multiple. */
+export async function saveSettings(input: { insights: boolean; capitalThreshold: number }): Promise<ActionResult> {
+  return run(async (userId) => {
+    const prefs = await getPrefsRepo();
+    await prefs.set(userId, {
+      insights: Boolean(input?.insights),
+      capitalThreshold: clampThreshold(input?.capitalThreshold),
+    });
+    return { ok: true as const };
   });
 }
 

@@ -17,8 +17,8 @@ const trade = (t: Partial<Trade> & Pick<Trade, "date" | "side" | "quantity" | "t
   ...t,
 });
 
-const build = (trades: Trade[], prices: Record<string, number>, today = "2026-01-10") =>
-  buildInsights({ trades, positions: positionsByAsset(trades, prices), today });
+const build = (trades: Trade[], prices: Record<string, number>, today = "2026-01-10", threshold?: number) =>
+  buildInsights({ trades, positions: positionsByAsset(trades, prices), today, threshold });
 
 const byId = (list: Insight[], id: string) => list.find((i) => i.id === id);
 
@@ -78,6 +78,18 @@ test("below 2x there is no such insight, and a part-sold position uses cost stil
   const i = byId(build(part, { SOL: 200 }), "doubled-SOL");
   assert.ok(i);
   assert.match(i.detail, /Selling 2\.5 SOL at today's price returns that \$500\.00/);
+});
+
+test("the user's own multiple decides when the callout fires", () => {
+  const trades = [trade({ date: "2026-01-01", side: "buy", quantity: 10, total_usd: 1000 })];
+  // At 3x the default (2x) would fire, but this user asked for 5x.
+  assert.equal(byId(build(trades, { SOL: 300 }, "2026-01-10", 5), "doubled-SOL"), undefined);
+  assert.ok(byId(build(trades, { SOL: 500 }, "2026-01-10", 5), "doubled-SOL"), "fires at the user's line");
+  // A cautious user wants to know at 1.5x.
+  assert.ok(byId(build(trades, { SOL: 160 }, "2026-01-10", 1.5), "doubled-SOL"));
+  // Junk or out-of-range values fall back inside the allowed band instead of throwing.
+  assert.ok(byId(build(trades, { SOL: 300 }, "2026-01-10", Number.NaN), "doubled-SOL"));
+  assert.ok(byId(build(trades, { SOL: 300 }, "2026-01-10", 0), "doubled-SOL"), "clamped to the 1.1 floor");
 });
 
 test("realized and unrealized profit are split, with the paper share", () => {

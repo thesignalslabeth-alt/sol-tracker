@@ -61,7 +61,8 @@ from that user's own trades: how concentrated the holdings are, how much profit 
 banked versus on paper, cost basis against the live price, fees paid, coins fully sold,
 and whether the ledger has gone a month without an entry.
 
-Once a position is worth 2× or more of the cost still in it, the panel also works out
+Each user sets their own line in Settings (account menu): a multiple between 1.1 and 20,
+default 2. Once a position is worth that multiple or more of the cost still in it, the panel also works out
 how much of it would have to sell at today's price to take that original cost back out,
 and what would be left. It states the arithmetic and stops there: no line ever tells
 anyone to buy, sell or hold — a test asserts that. The setting lives in `user_prefs` and is per user.
@@ -123,7 +124,8 @@ app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
 lib/position.ts              pure position math (+ tests)
 lib/insights.ts              opt-in observations about your own ledger (+ tests)
-lib/prefs-repo.ts            per-user settings (insights on/off), same store as trades
+lib/prefs.ts                 per-user settings shape + bounds (client-safe)
+lib/prefs-repo.ts            settings storage, same store as trades
 lib/trades-repo.ts           storage interface → lib/repo/{json,postgres}.ts
 lib/price.ts                 Binance prices (60s cache) + fiat rates, stale fallback
 lib/currencies.ts            supported trade currencies
