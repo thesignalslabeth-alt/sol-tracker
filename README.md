@@ -59,8 +59,12 @@ Off by default, and nothing about it appears on the dashboard until it's switche
 from the account menu ("Show insights"). When on, a panel lists plain facts worked out
 from that user's own trades: how concentrated the holdings are, how much profit is
 banked versus on paper, cost basis against the live price, fees paid, coins fully sold,
-and whether the ledger has gone a month without an entry. It never suggests buying or
-selling. The setting lives in `user_prefs` and is per user.
+and whether the ledger has gone a month without an entry.
+
+Once a position is worth 2× or more of the cost still in it, the panel also works out
+how much of it would have to sell at today's price to take that original cost back out,
+and what would be left. It states the arithmetic and stops there: no line ever tells
+anyone to buy, sell or hold — a test asserts that. The setting lives in `user_prefs` and is per user.
 
 ## Importing and exporting CSV
 

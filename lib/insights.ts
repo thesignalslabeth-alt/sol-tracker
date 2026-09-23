@@ -12,6 +12,9 @@ export type Insight = {
   tone: "neutral" | "gain" | "loss";
 };
 
+/** A position worth this multiple of the money still in it gets the "cost back out" arithmetic. */
+const DOUBLE = 2;
+
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -53,7 +56,26 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 2. Realized vs unrealized: how much of the profit is banked and how much is on paper.
+  // 2. Positions worth twice their remaining cost, with the arithmetic for taking
+  // the original money back out. A calculation, not a suggestion to sell.
+  for (const p of [...held].sort((a, b) => b.position.unrealizedValue - a.position.unrealizedValue)) {
+    const { unrealizedValue, remainingCostBasis, held: qty } = p.position;
+    if (p.price == null || remainingCostBasis <= 0) continue;
+    const multiple = unrealizedValue / remainingCostBasis;
+    if (multiple < DOUBLE) continue;
+    const toRecover = Math.min(qty, remainingCostBasis / p.price);
+    out.push({
+      id: `doubled-${p.asset}`,
+      title: `${p.asset} is worth ${round(multiple)}× what you still have in it`,
+      detail:
+        `${trim(qty)} ${p.asset} at ${price(p.price)} is ${usd(unrealizedValue)}, against ${usd(remainingCostBasis)} of cost. ` +
+        `Selling ${trim(round8(toRecover))} ${p.asset} at today's price returns that ${usd(remainingCostBasis)}, ` +
+        `leaving ${trim(round8(qty - toRecover))} ${p.asset} held at no remaining cost. Your call — this is just the arithmetic.`,
+      tone: "gain",
+    });
+  }
+
+  // 3. Realized vs unrealized: how much of the profit is banked and how much is on paper.
   const realized = positions.reduce((s, p) => s + p.position.realizedPL, 0);
   const unrealized = priced ? positions.reduce((s, p) => s + p.position.unrealizedPL, 0) : 0;
   if (priced && (realized !== 0 || unrealized !== 0)) {
@@ -69,7 +91,7 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 3. Cost basis vs price, per held coin (biggest holding first).
+  // 4. Cost basis vs price, per held coin (biggest holding first).
   for (const p of [...held].sort((a, b) => b.position.unrealizedValue - a.position.unrealizedValue).slice(0, 3)) {
     if (p.price == null || p.position.avgCostBasis <= 0) continue;
     const diff = pct(p.price - p.position.avgCostBasis, p.position.avgCostBasis);
@@ -81,7 +103,7 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 4. Fees, which are easy to forget once they're inside each trade.
+  // 5. Fees, which are easy to forget once they're inside each trade.
   const fees = trades.reduce((s, t) => s + t.fee_usd, 0);
   const deployed = positions.reduce((s, p) => s + p.position.totalCapitalDeployed, 0);
   if (fees > 0) {
@@ -93,7 +115,7 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 5. Closed positions: coins you no longer hold.
+  // 6. Closed positions: coins you no longer hold.
   const closed = positions.filter((p) => p.position.held === 0);
   if (closed.length > 0) {
     const closedPL = closed.reduce((s, p) => s + p.position.realizedPL, 0);
@@ -105,7 +127,7 @@ export function buildInsights({ trades, positions, today }: InsightInput): Insig
     });
   }
 
-  // 6. Last entry, so a ledger that's drifted out of date says so.
+  // 7. Last entry, so a ledger that's drifted out of date says so.
   const last = sortTrades(trades).at(-1);
   if (last) {
     const days = daysBetween(last.date, today);
@@ -127,4 +149,5 @@ const usd = (n: number) => usdFmt.format(n);
 const signed = (n: number) => `${n >= 0 ? "+" : "−"}${usdFmt.format(Math.abs(n))}`;
 const price = (n: number) =>
   n >= 1 ? usdFmt.format(n) : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumSignificantDigits: 4 }).format(n);
+const round8 = (n: number) => Math.round(n * 1e8) / 1e8;
 const trim = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 8 }).format(n);

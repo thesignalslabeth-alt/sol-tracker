@@ -47,6 +47,30 @@ test("value-based insights are skipped when a held coin has no price", () => {
   assert.deepEqual(ids.filter((id) => id === "concentration" || id === "realized-split"), []);
 });
 
+test("a position worth 2x its remaining cost shows how much sells to get that cost back", () => {
+  const trades = [trade({ date: "2026-01-01", side: "buy", quantity: 10, total_usd: 1000 })];
+  const i = byId(build(trades, { SOL: 300 }), "doubled-SOL");
+  assert.ok(i, "expected the 2x insight");
+  assert.match(i.title, /SOL is worth 3× what you still have in it/);
+  // $1,000 of cost left / $300 = 3.33333333 SOL sold returns it, 6.66666667 SOL stays.
+  assert.match(i.detail, /10 SOL at \$300\.00 is \$3,000\.00, against \$1,000\.00 of cost\./);
+  assert.match(i.detail, /Selling 3\.33333333 SOL at today's price returns that \$1,000\.00/);
+  assert.match(i.detail, /leaving 6\.66666667 SOL held at no remaining cost/);
+});
+
+test("below 2x there is no such insight, and a part-sold position uses cost still in it", () => {
+  const trades = [trade({ date: "2026-01-01", side: "buy", quantity: 10, total_usd: 1000 })];
+  assert.equal(byId(build(trades, { SOL: 199 }), "doubled-SOL"), undefined);
+  assert.ok(byId(build(trades, { SOL: 200 }), "doubled-SOL"), "exactly 2x counts");
+
+  // Sell half: $500 of cost remains against 5 SOL, so $100/SOL still needs 2x = $200.
+  const part = [...trades, trade({ date: "2026-01-02", side: "sell", quantity: 5, total_usd: 900 })];
+  assert.equal(byId(build(part, { SOL: 199 }), "doubled-SOL"), undefined);
+  const i = byId(build(part, { SOL: 200 }), "doubled-SOL");
+  assert.ok(i);
+  assert.match(i.detail, /Selling 2\.5 SOL at today's price returns that \$500\.00/);
+});
+
 test("realized and unrealized profit are split, with the paper share", () => {
   const trades = [
     trade({ date: "2026-01-01", side: "buy", quantity: 10, total_usd: 1000 }),
