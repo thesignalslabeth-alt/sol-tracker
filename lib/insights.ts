@@ -4,7 +4,7 @@
 import type { AssetPosition } from "./position";
 import { clampThreshold, DEFAULT_PREFS } from "./prefs";
 import { sortTrades } from "./position";
-import type { Trade } from "./trade-schema";
+import { SIDE_LABEL, type Trade } from "./trade-schema";
 
 export type Insight = {
   id: string;
@@ -128,7 +128,19 @@ export function buildInsights({ trades, positions, today, threshold }: InsightIn
     });
   }
 
-  // 6. Closed positions: coins you no longer hold.
+  // 6. Staking rewards: coins that arrived at no cost, so they pull the average down.
+  for (const p of held.filter((x) => x.position.stakedQuantity > 0)) {
+    const { stakedQuantity: earned, held: qty } = p.position;
+    const worth = p.price != null ? ` Worth ${usd(earned * p.price)} at today's price.` : "";
+    out.push({
+      id: `staked-${p.asset}`,
+      title: `${trim(round8(earned))} ${p.asset} earned from staking`,
+      detail: `That's ${round(pct(earned, qty))}% of the ${trim(qty)} ${p.asset} you hold, received at no cost, which pulls your average cost down.${worth}`,
+      tone: "gain",
+    });
+  }
+
+  // 7. Closed positions: coins you no longer hold.
   const closed = positions.filter((p) => p.position.held === 0);
   if (closed.length > 0) {
     const closedPL = closed.reduce((s, p) => s + p.position.realizedPL, 0);
@@ -140,7 +152,7 @@ export function buildInsights({ trades, positions, today, threshold }: InsightIn
     });
   }
 
-  // 7. Last entry, so a ledger that's drifted out of date says so.
+  // 8. Last entry, so a ledger that's drifted out of date says so.
   const last = sortTrades(trades).at(-1);
   if (last) {
     const days = daysBetween(last.date, today);
@@ -148,7 +160,7 @@ export function buildInsights({ trades, positions, today, threshold }: InsightIn
       out.push({
         id: "stale-ledger",
         title: `No trades logged for ${days} days`,
-        detail: `Your last entry is a ${last.side} of ${last.asset} on ${last.date}. Anything traded since then is missing from these numbers.`,
+        detail: `Your last entry is a ${SIDE_LABEL[last.side].toLowerCase()} of ${last.asset} on ${last.date}. Anything traded since then is missing from these numbers.`,
         tone: "neutral",
       });
     }

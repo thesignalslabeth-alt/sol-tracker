@@ -16,11 +16,13 @@ export function AssetAllocationChart({ asset, position: p }: { asset: string; po
     { name: "Remaining", value: p.held, color: CATEGORICAL[0] },
     ...shown.map((s, i) => ({ ...s, color: CATEGORICAL[i + 1] })),
   ];
-  const bought = slices.reduce((a, s) => a + s.value, 0);
+  const acquired = slices.reduce((a, s) => a + s.value, 0);
+  // Staking rewards are in there too, so "acquired" rather than "bought".
+  const staked = p.stakedQuantity > 0 ? `, ${fmtQty(p.stakedQuantity, asset)} of it staking rewards` : "";
   return (
     <DonutCard
       title={`${asset} allocation`}
-      description={`${fmtQty(bought, asset)} bought in total`}
+      description={`${fmtQty(acquired, asset)} acquired in total${staked}`}
       slices={slices}
       centerValue={fmtQtyNum(p.held)}
       centerLabel={`${asset} held`}

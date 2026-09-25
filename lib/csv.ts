@@ -73,6 +73,23 @@ function finish(line: number, row: Record<string, string>, draft: unknown, extra
 
 function parseTemplateRow(line: number, row: Record<string, string>, known?: Set<string>): ParsedRow {
   const get = (k: string) => (row[k] ?? "").trim();
+  const side = get("side").toLowerCase();
+  // Staking rewards carry no money: quantity and date are all that's read.
+  if (side === "stake") {
+    const draft = {
+      date: get("date"),
+      asset: get("asset"),
+      side,
+      quantity: Number(get("quantity").replace(/,/g, "")),
+      total_usd: 0,
+      fee_usd: 0,
+      quote_currency: "USD",
+      quote_amount: null,
+      fx_usd_per_quote: null,
+      note: get("note") || null,
+    };
+    return finish(line, row, draft, {}, known);
+  }
   const currency = (get("currency") || "USD").toUpperCase();
   const foreign = currency !== "USD";
   // fx_usd_per_sgd is the column name from before multi-currency support.
@@ -83,7 +100,7 @@ function parseTemplateRow(line: number, row: Record<string, string>, known?: Set
   const draft = {
     date: get("date"),
     asset: get("asset"),
-    side: get("side").toLowerCase(),
+    side,
     quantity: Number(get("quantity").replace(/,/g, "")),
     total_usd: exactUsd ?? total * fx,
     fee_usd: fee * fx,
@@ -229,10 +246,11 @@ export function toTemplateCsv(trades: readonly Trade[]): string {
       asset: t.asset,
       side: t.side,
       quantity: t.quantity,
-      total: foreign ? t.quote_amount : t.total_usd,
+      // Staking rewards have no money columns at all; blanks re-import as zero cost.
+      total: t.side === "stake" ? "" : foreign ? t.quote_amount : t.total_usd,
       currency: t.quote_currency,
       fx_usd_per_quote: foreign ? t.fx_usd_per_quote : "",
-      total_usd: t.total_usd,
+      total_usd: t.side === "stake" ? "" : t.total_usd,
       fee: t.fee_usd ? +(t.fee_usd / fx).toFixed(8) : "",
       note: t.note ?? "",
     };

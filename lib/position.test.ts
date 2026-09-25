@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { calculatePosition, maxSellable, OversellError, positionsByAsset, previewTrade, validateLedger } from "./position";
-import { tradeInputSchema, type Trade } from "./trade-schema";
+import { normalizeInput, tradeInputSchema, type Trade } from "./trade-schema";
 
 const seed: Trade[] = JSON.parse(readFileSync(join(process.cwd(), "data/trades.json"), "utf8"));
 
@@ -99,6 +99,27 @@ test("previewTrade reports before/after and oversells", () => {
   assert.equal(sell.ok, false);
 });
 
+test("editing a buy that later sells depend on previews against the saved ledger", () => {
+  const original = seed.find((t) => t.id === "buys-aggregate-2026")!;
+
+  // Unchanged: the same ledger before and after, not an oversell.
+  const same = previewTrade(seed, original, 100, original.id);
+  assert.ok(same.ok, same.ok ? "" : same.error);
+  cents(same.before.avgCostBasis, 72.47, "before is the saved ledger");
+  cents(same.after.avgCostBasis, 72.47, "after is unchanged");
+  assert.equal(same.before.held, 40);
+
+  // A real correction, such as adding a fee or fixing the total, goes through.
+  const corrected = previewTrade(seed, { ...original, total_usd: 7000, fee_usd: 5 }, 100, original.id);
+  assert.ok(corrected.ok, corrected.ok ? "" : corrected.error);
+  cents(corrected.after.avgCostBasis, 7000 / 97, "re-averaged from the corrected total");
+
+  // Shrinking it below what the later sells need (33 + 24 = 57) is still refused.
+  const tooSmall = previewTrade(seed, { ...original, quantity: 50 }, 100, original.id);
+  assert.equal(tooSmall.ok, false);
+  assert.ok(!tooSmall.ok && tooSmall.before != null, "before still shows the saved position");
+});
+
 test("maxSellable respects later sells", () => {
   cents(maxSellable(seed, "SOL", "2026-09-30"), 40, "today");
   // On Aug 28, 64 SOL are held, but the Sep 22 sale of 24 needs to stay covered.
@@ -154,4 +175,47 @@ test("assets without a price are flagged", () => {
   const [p] = positionsByAsset(seed, {});
   assert.equal(p.price, null);
   assert.equal(p.position.unrealizedValue, 0);
+});
+
+test("a staking reward adds free coins: avg cost and break-even fall, nothing is realized", () => {
+  const before = calculatePosition(seed, 100);
+  const p = calculatePosition(
+    [...seed, trade({ date: "2026-09-30", side: "stake", quantity: 2, total_usd: 0 })],
+    100,
+  );
+  assert.equal(p.held, 42);
+  assert.equal(p.stakedQuantity, 2);
+  cents(p.remainingCostBasis, before.remainingCostBasis, "basis unchanged");
+  cents(p.totalCapitalDeployed, before.totalCapitalDeployed, "no capital deployed");
+  cents(p.realizedPL, before.realizedPL, "nothing realized");
+  cents(p.avgCostBasis, before.remainingCostBasis / 42, "avg cost diluted");
+  assert.ok(p.avgCostBasis < before.avgCostBasis, "avg cost falls");
+  assert.ok(p.breakEvenPrice < before.breakEvenPrice, "break-even falls");
+  cents(p.unrealizedPL, before.unrealizedPL + 200, "the 2 free SOL are unrealized gain");
+  cents(p.totalPL, p.totalPortfolioValue - p.totalCapitalDeployed, "identity still holds");
+});
+
+test("staked coins count as holdings a later sell can draw on", () => {
+  const ledger = [
+    trade({ date: "2026-07-01", side: "buy", quantity: 10, total_usd: 1000 }),
+    trade({ date: "2026-08-01", side: "stake", quantity: 1, total_usd: 0 }),
+  ];
+  assert.equal(maxSellable(ledger, "SOL", "2026-09-01"), 11);
+  assert.equal(maxSellable(ledger, "SOL", "2026-07-15"), 10, "before the reward arrived");
+  const sold = calculatePosition([...ledger, trade({ date: "2026-09-01", side: "sell", quantity: 11, total_usd: 2200 })], 200);
+  cents(sold.realizedPL, 1200, "the whole cost comes back plus the free coin's value");
+  assert.equal(sold.held, 0);
+});
+
+test("schema: a staking reward carries no money, a buy still must", () => {
+  const reward = {
+    date: "2026-09-30", asset: "SOL", side: "stake", quantity: 0.5, total_usd: 0, fee_usd: 0,
+    quote_currency: "USD", quote_amount: null, fx_usd_per_quote: null, note: null,
+  };
+  assert.ok(tradeInputSchema.safeParse(reward).success, "zero-cost reward");
+  assert.equal(tradeInputSchema.safeParse({ ...reward, total_usd: 100 }).success, false, "reward with a cost");
+  assert.equal(tradeInputSchema.safeParse({ ...reward, fee_usd: 1 }).success, false, "reward with a fee");
+  assert.equal(tradeInputSchema.safeParse({ ...reward, side: "buy" }).success, false, "buy with no total");
+  assert.equal(tradeInputSchema.safeParse({ ...reward, quantity: 0 }).success, false, "reward of nothing");
+  assert.deepEqual(normalizeInput({ ...tradeInputSchema.parse(reward), quote_currency: "SGD" }).quote_currency, "USD");
 });

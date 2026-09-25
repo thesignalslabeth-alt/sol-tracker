@@ -27,6 +27,8 @@ export type SaleResult = {
 export type Position = {
   avgCostBasis: number;
   held: number;
+  /** Quantity received as staking rewards, included in `held`. */
+  stakedQuantity: number;
   remainingCostBasis: number;
   totalCapitalDeployed: number;
   totalRealizedCash: number;
@@ -77,24 +79,28 @@ export function positionsByAsset(trades: readonly Trade[], prices: Readonly<Reco
 
 /**
  * Moving average cost for a single asset's trades: buys re-average, sells remove basis at the current average
- * and leave the average unchanged. Throws OversellError if a sell exceeds holdings
- * at its own point in time.
+ * and leave the average unchanged. Staking rewards are buys that cost nothing: they add
+ * quantity, deploy no capital, and so pull the average cost and break-even down.
+ * Throws OversellError if a sell exceeds holdings at its own point in time.
  */
 export function calculatePosition(trades: readonly Trade[], currentPrice: number): Position {
   let held = 0;
   let costBasis = 0;
   let avgCost = 0;
+  let stakedQuantity = 0;
   let totalCapitalDeployed = 0;
   let totalRealizedCash = 0;
   let realizedPL = 0;
   const sales: SaleResult[] = [];
 
   for (const t of sortTrades(trades)) {
-    if (t.side === "buy") {
+    // Staking rewards land here too, with total_usd of 0.
+    if (t.side !== "sell") {
       costBasis += t.total_usd;
       held += t.quantity;
       avgCost = costBasis / held;
       totalCapitalDeployed += t.total_usd;
+      if (t.side === "stake") stakedQuantity += t.quantity;
       continue;
     }
 
@@ -131,6 +137,7 @@ export function calculatePosition(trades: readonly Trade[], currentPrice: number
   return {
     avgCostBasis: held > 0 ? avgCost : 0,
     held,
+    stakedQuantity,
     remainingCostBasis: costBasis,
     totalCapitalDeployed,
     totalRealizedCash,
@@ -152,7 +159,10 @@ export type TradePreview =
 
 /**
  * Position before and after applying `draft` to the ledger. Pass `replaceId` when
- * editing so the old version of the trade is dropped first.
+ * editing so the draft takes the old version's place.
+ *
+ * "Before" is the ledger as saved, old version included. Computing it with the edited
+ * trade removed would make any buy that later sells depend on look like an oversell.
  */
 export function previewTrade(
   trades: readonly Trade[],
@@ -160,11 +170,12 @@ export function previewTrade(
   currentPrice: number,
   replaceId?: string,
 ): TradePreview {
-  const base = trades.filter((t) => t.asset === draft.asset && t.id !== replaceId);
+  const current = trades.filter((t) => t.asset === draft.asset);
+  const next = [...current.filter((t) => t.id !== replaceId), draft];
   let before: Position | null = null;
   try {
-    before = calculatePosition(base, currentPrice);
-    const after = calculatePosition([...base, draft], currentPrice);
+    before = calculatePosition(current, currentPrice);
+    const after = calculatePosition(next, currentPrice);
     const sale = after.sales.find((s) => s.id === draft.id) ?? null;
     return { ok: true, before, after, sale };
   } catch (e) {
@@ -183,7 +194,7 @@ export function maxSellable(trades: readonly Trade[], asset: string, date: strin
   let min = Infinity;
   for (const t of sortTrades(trades)) {
     if (t.id === excludeId || t.asset !== asset) continue;
-    held += t.side === "buy" ? t.quantity : -t.quantity;
+    held += t.side === "sell" ? -t.quantity : t.quantity;
     if (t.date > date) min = Math.min(min, held);
     else min = held; // running holdings up to and including the draft's day
   }

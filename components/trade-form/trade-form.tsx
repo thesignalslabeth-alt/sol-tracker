@@ -13,12 +13,12 @@ import { fmtMoney, fmtPrice, fmtQty, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass
 import { maxSellable, previewTrade } from "@/lib/position";
 import type { Prices } from "@/lib/price";
 import { CURRENCIES, CURRENCY_NAMES, type Currency } from "@/lib/currencies";
-import { tradeInputSchema, type Trade, type TradeInput } from "@/lib/trade-schema";
+import { SIDE_LABEL, tradeInputSchema, type Trade, type TradeInput } from "@/lib/trade-schema";
 import { AssetPicker } from "./asset-picker";
 import { Segmented } from "./segmented";
 
 type FormValues = {
-  side: "buy" | "sell";
+  side: Trade["side"];
   asset: string;
   date: string;
   quantity: string;
@@ -26,7 +26,7 @@ type FormValues = {
   mode: "total" | "price";
   amount: string; // total or price per unit, in `currency`
   fx: string; // units of `currency` per 1 USD, as rates are usually quoted
-  fee: string; // in `currency`
+  fee: string; // in the traded asset (e.g. SOL on Pionex), priced at this trade's own fill
   note: string;
 };
 
@@ -42,6 +42,12 @@ const sig = (n: number, digits: number) => Number(n.toPrecision(digits));
  */
 function toInput(v: FormValues, original: { values: FormValues; trade: Trade } | null): TradeInput {
   const qty = num(v.quantity);
+  const base = { date: v.date, asset: v.asset.trim().toUpperCase(), quantity: qty, note: v.note.trim() || null };
+  // A staking reward is quantity received and nothing else: no cost, no fee, no currency.
+  if (v.side === "stake") {
+    return { ...base, side: "stake", total_usd: 0, fee_usd: 0, quote_currency: "USD", quote_amount: null, fx_usd_per_quote: null };
+  }
+
   const amount = num(v.amount);
   const foreign = v.currency !== "USD";
   const usdPerUnit = foreign ? 1 / num(v.fx) : 1;
@@ -50,17 +56,20 @@ function toInput(v: FormValues, original: { values: FormValues; trade: Trade } |
   const o = original?.values;
   const untouched =
     o && v.mode === "total" && v.currency === o.currency && v.amount === o.amount && v.fx === o.fx;
+  const total_usd = untouched ? original!.trade.total_usd : round(quoteTotal * usdPerUnit, 6);
+  // Fee is entered in the traded asset (Pionex charges it in SOL) and priced at this
+  // trade's own fill, not today's price — a fee on a 2024 buy cost what SOL cost then.
+  // When nothing that feeds it was touched, the stored USD value is kept exactly.
+  const fillPrice = qty > 0 && total_usd > 0 ? total_usd / qty : 0;
+  const feeUntouched = o && v.fee === o.fee && v.quantity === o.quantity && untouched;
   return {
-    date: v.date,
-    asset: v.asset.trim().toUpperCase(),
+    ...base,
     side: v.side,
-    quantity: qty,
-    total_usd: untouched ? original!.trade.total_usd : round(quoteTotal * usdPerUnit, 6),
-    fee_usd: round(fee * usdPerUnit, 6),
+    total_usd,
+    fee_usd: feeUntouched ? original!.trade.fee_usd : round(fee * fillPrice, 8),
     quote_currency: v.currency,
     quote_amount: foreign ? round(quoteTotal, 6) : null,
     fx_usd_per_quote: foreign ? (untouched ? original!.trade.fx_usd_per_quote : sig(usdPerUnit, 10)) : null,
-    note: v.note.trim() || null,
   };
 }
 
@@ -99,6 +108,7 @@ function defaults(editing: Trade | null, defaultAsset: string, defaultCurrency: 
   }
   const foreign = editing.quote_currency !== "USD" && editing.fx_usd_per_quote != null;
   const usdPerUnit = foreign ? editing.fx_usd_per_quote! : 1;
+  const fillPrice = editing.quantity > 0 ? editing.total_usd / editing.quantity : 0;
   return {
     side: editing.side,
     asset: editing.asset,
@@ -108,7 +118,8 @@ function defaults(editing: Trade | null, defaultAsset: string, defaultCurrency: 
     mode: "total",
     amount: String(foreign ? (editing.quote_amount ?? editing.total_usd / usdPerUnit) : editing.total_usd),
     fx: foreign ? String(sig(1 / usdPerUnit, 8)) : "",
-    fee: editing.fee_usd ? String(round(editing.fee_usd / usdPerUnit, 2)) : "",
+    // Fee is stored in USD; show it as the traded asset at this trade's own fill price.
+    fee: editing.fee_usd && fillPrice > 0 ? String(round(editing.fee_usd / fillPrice, 8)) : "",
     note: editing.note ?? "",
   };
 }
@@ -138,14 +149,16 @@ export function TradeForm({
   const [saving, startSaving] = useTransition();
   const [draftCreatedAt] = useState(() => new Date().toISOString());
   const v = useWatch({ control }) as FormValues;
-  const foreign = v.currency !== "USD";
+  const staking = v.side === "stake";
+  const foreign = !staking && v.currency !== "USD";
   const cur = foreign ? v.currency : "$";
   const money = (n: number) =>
     foreign ? fmtMoney(n, v.currency) : `$${round(n, 4).toLocaleString("en-US")}`;
   const input = toInput(v, original);
   const sol = input.quantity;
   const quoteTotal = foreign ? input.quote_amount! : input.total_usd;
-  const hasAmounts = sol > 0 && input.total_usd > 0;
+  const hasAmounts = sol > 0 && (staking || input.total_usd > 0);
+  const fillPrice = sol > 0 && input.total_usd > 0 ? input.total_usd / sol : 0;
   const asset = input.asset;
   const assetKnown = knownAssets.length === 0 || knownAssets.includes(asset);
   const livePrice = prices.usd[asset] ?? 0;
@@ -182,7 +195,7 @@ export function TradeForm({
     startSaving(async () => {
       const res = editing ? await updateTrade(editing.id, parsed.data) : await createTrade(parsed.data);
       if (res.ok) {
-        toast.success(editing ? "Trade updated" : `${values.side === "buy" ? "Buy" : "Sell"} saved`);
+        toast.success(editing ? "Trade updated" : `${SIDE_LABEL[values.side]} saved`);
         onDone();
       } else {
         toast.error(res.error);
@@ -204,6 +217,7 @@ export function TradeForm({
         options={[
           { value: "buy", label: "Buy", activeClass: "bg-gain text-white shadow-sm" },
           { value: "sell", label: "Sell", activeClass: "bg-loss text-white shadow-sm" },
+          { value: "stake", label: "Staking", activeClass: "bg-primary text-primary-foreground shadow-sm" },
         ]}
       />
 
@@ -227,13 +241,14 @@ export function TradeForm({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={cn("grid gap-3", !staking && "grid-cols-2")}>
         <div className="space-y-1.5">
-          <Label htmlFor="date">Date</Label>
+          <Label htmlFor="date">Date{staking && " received"}</Label>
           <Input id="date" type="date" className="h-11 text-base" max={todaySg()} {...reg("date")} />
           {err("date") && <p className="text-xs text-loss">{err("date")}</p>}
         </div>
-        <div className="space-y-1.5">
+        {/* A reward has no money side: no currency, total, rate or fee. */}
+        <div className={cn("space-y-1.5", staking && "hidden")}>
           <Label htmlFor="currency">Currency</Label>
           {/* Native select: the phone's own picker is the best UI for a long list. */}
           <select
@@ -259,7 +274,7 @@ export function TradeForm({
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="quantity">{asset || "Asset"} amount</Label>
+          <Label htmlFor="quantity">{asset || "Asset"} {staking ? "received" : "amount"}</Label>
           {v.side === "sell" && (
             <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={setMax}>
               Max ({fmtQty(maxSellable(trades, asset, v.date, editing?.id), asset)})
@@ -270,7 +285,7 @@ export function TradeForm({
         {err("quantity") && <p className="text-xs text-loss">{err("quantity")}</p>}
       </div>
 
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", staking && "hidden")}>
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="amount">
             {v.mode === "total" ? (v.side === "buy" ? "Total paid" : "Total received") : `Price per ${asset || "coin"}`} ({v.currency})
@@ -344,11 +359,19 @@ export function TradeForm({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="fee">Fee ({v.currency}, optional)</Label>
+      <div className={cn("grid gap-3", !staking && "grid-cols-2")}>
+        <div className={cn("space-y-1.5", staking && "hidden")}>
+          <Label htmlFor="fee">Fee ({asset || "asset"}, optional)</Label>
           <Input id="fee" placeholder="0" {...decimal} {...reg("fee")} aria-invalid={!!err("fee")} />
-          {err("fee") && <p className="text-xs text-loss">{err("fee")}</p>}
+          {err("fee") ? (
+            <p className="text-xs text-loss">{err("fee")}</p>
+          ) : (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {v.fee !== "" && fillPrice > 0
+                ? `≈ $${round(num(v.fee) * fillPrice, 2)} at this trade's price`
+                : "Priced at this trade's own price"}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="note">Note</Label>
@@ -361,9 +384,13 @@ export function TradeForm({
       <Button
         type="submit"
         disabled={saving || !assetKnown || (preview != null && !preview.ok)}
-        className={cn("h-12 w-full text-base text-white", v.side === "buy" ? "bg-gain hover:bg-gain/90" : "bg-loss hover:bg-loss/90")}
+        className={cn(
+          "h-12 w-full text-base",
+          v.side === "buy" && "bg-gain text-white hover:bg-gain/90",
+          v.side === "sell" && "bg-loss text-white hover:bg-loss/90",
+        )}
       >
-        {saving ? "Saving…" : editing ? "Save changes" : v.side === "buy" ? "Save buy" : "Save sell"}
+        {saving ? "Saving…" : editing ? "Save changes" : staking ? "Save reward" : `Save ${v.side}`}
       </Button>
     </form>
   );
@@ -375,7 +402,7 @@ function Preview({
   asset,
 }: {
   preview: ReturnType<typeof previewTrade> | null;
-  side: "buy" | "sell";
+  side: Trade["side"];
   asset: string;
 }) {
   if (!preview) {
@@ -408,6 +435,9 @@ function Preview({
             Avg cost {fmtPrice(before.avgCostBasis)} → <span className="font-semibold">{fmtPrice(after.avgCostBasis)}</span>
           </p>
           <p className="text-muted-foreground">Holdings {fmtQty(before.held, asset)} → {fmtQty(after.held, asset)}</p>
+          {side === "stake" && (
+            <p className="text-muted-foreground">Free coins: no capital added, so your average cost falls.</p>
+          )}
         </>
       )}
     </div>

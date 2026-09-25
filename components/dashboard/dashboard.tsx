@@ -141,7 +141,7 @@ function EmptyState({ onAdd, onImport }: { onAdd: () => void; onImport: () => vo
         <div>
           <p className="text-lg font-semibold">No trades yet</p>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-            Log a buy or sell for any coin listed on Binance, or import a CSV from Binance or the template.
+            Log a buy, sell or staking reward for any coin listed on Binance, or import a CSV from Binance or the template.
           </p>
         </div>
         <div className="flex w-full max-w-xs flex-col gap-2 sm:flex-row sm:justify-center">

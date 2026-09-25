@@ -3,9 +3,10 @@ create table if not exists trades (
   user_id          text not null,
   date             date not null,
   asset            text not null default 'SOL',
-  side             text not null check (side in ('buy', 'sell')),
+  side             text not null check (side in ('buy', 'sell', 'stake')),
   quantity       numeric(20, 8) not null check (quantity > 0),
-  total_usd        numeric(20, 8) not null check (total_usd > 0),
+  -- 0 only for staking rewards, which are received at no cost.
+  total_usd        numeric(20, 8) not null check (total_usd >= 0),
   fee_usd          numeric(20, 8) not null default 0 check (fee_usd >= 0),
   -- Allowed codes are kept in sync with lib/currencies.ts by `npm run db:seed`.
   quote_currency   text not null check (quote_currency in ('USD', 'SGD', 'MYR', 'IDR', 'THB', 'PHP', 'VND', 'HKD', 'JPY', 'KRW', 'CNY', 'TWD', 'INR')),
@@ -23,6 +24,13 @@ create table if not exists user_prefs (
   insights   boolean not null default false,
   updated_at timestamptz not null default now()
 );
+
+-- Added after trades shipped: staking rewards, a third side with no cost.
+-- `create table if not exists` leaves an existing table's constraints alone, so restate them.
+alter table if exists trades drop constraint if exists trades_side_check;
+alter table if exists trades add constraint trades_side_check check (side in ('buy', 'sell', 'stake'));
+alter table if exists trades drop constraint if exists trades_total_usd_check;
+alter table if exists trades add constraint trades_total_usd_check check (total_usd >= 0);
 
 -- Added after user_prefs shipped: each user's own "worth N× its cost" line.
 alter table if exists user_prefs add column if not exists capital_threshold numeric(6, 2) not null default 2;

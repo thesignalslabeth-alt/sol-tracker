@@ -21,18 +21,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtPrice, fmtQty, fmtMoney, fmtQtyNum, fmtSignedPct, fmtSignedUsd, fmtUsd, plClass } from "@/lib/format";
 import { sortTrades, type AssetPosition, type SaleResult } from "@/lib/position";
-import type { Trade } from "@/lib/trade-schema";
+import { SIDE_LABEL, type Trade } from "@/lib/trade-schema";
+
+const SIDE_CLASS: Record<Trade["side"], string> = {
+  buy: "border-gain/40 bg-gain/10 text-gain",
+  sell: "border-loss/40 bg-loss/10 text-loss",
+  stake: "border-primary/40 bg-primary/10 text-primary",
+};
 
 function SideBadge({ side }: { side: Trade["side"] }) {
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "uppercase",
-        side === "buy" ? "border-gain/40 bg-gain/10 text-gain" : "border-loss/40 bg-loss/10 text-loss",
-      )}
-    >
-      {side}
+    <Badge variant="outline" className={cn("uppercase", SIDE_CLASS[side])}>
+      {side === "stake" ? "staking" : side}
     </Badge>
   );
 }
@@ -122,10 +122,13 @@ export function TradeHistory({
                     <span className="text-sm text-muted-foreground">{fmtDate(t.date)}</span>
                   </div>
                   <p className="font-medium tabular-nums">
-                    {fmtQty(t.quantity, t.asset)} <span className="text-muted-foreground">@ {fmtPrice(t.total_usd / t.quantity)}</span>
+                    {fmtQty(t.quantity, t.asset)}{" "}
+                    <span className="text-muted-foreground">
+                      {t.side === "stake" ? "received" : `@ ${fmtPrice(t.total_usd / t.quantity)}`}
+                    </span>
                   </p>
                   <p className="text-sm tabular-nums text-muted-foreground">
-                    {fmtUsd(t.total_usd)}
+                    {t.side === "stake" ? "No cost" : fmtUsd(t.total_usd)}
                     {t.quote_currency !== "USD" && t.quote_amount != null && ` · ${fmtMoney(t.quote_amount, t.quote_currency)}`}
                   </p>
                   {t.side === "sell" && (
@@ -175,9 +178,11 @@ export function TradeHistory({
                     <SideBadge side={t.side} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{fmtQtyNum(t.quantity)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmtPrice(t.total_usd / t.quantity)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {fmtUsd(t.total_usd)}
+                    {t.side === "stake" ? <span className="text-muted-foreground">—</span> : fmtPrice(t.total_usd / t.quantity)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {t.side === "stake" ? <span className="text-muted-foreground">—</span> : fmtUsd(t.total_usd)}
                     {t.quote_currency !== "USD" && t.quote_amount != null && (
                       <div className="text-xs text-muted-foreground">{fmtMoney(t.quote_amount, t.quote_currency)}</div>
                     )}
@@ -200,7 +205,9 @@ export function TradeHistory({
             <AlertDialogTitle>Delete this trade?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete &&
-                `${pendingDelete.side === "buy" ? "Buy" : "Sell"} of ${fmtQty(pendingDelete.quantity, pendingDelete.asset)} on ${fmtDate(pendingDelete.date)} for ${fmtUsd(pendingDelete.total_usd)}. This can't be undone.`}
+                `${SIDE_LABEL[pendingDelete.side]} of ${fmtQty(pendingDelete.quantity, pendingDelete.asset)} on ${fmtDate(pendingDelete.date)}${
+                  pendingDelete.side === "stake" ? "" : ` for ${fmtUsd(pendingDelete.total_usd)}`
+                }. This can't be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

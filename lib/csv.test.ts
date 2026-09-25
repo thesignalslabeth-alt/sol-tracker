@@ -118,3 +118,25 @@ test("MYR trades round-trip through export", () => {
   assert.equal(back.quote_amount, 3480);
   close(back.total_usd, 852.95, "exact USD total kept");
 });
+
+test("staking rewards round-trip with blank money columns", () => {
+  const reward: Trade = {
+    id: "s", date: "2026-09-01", asset: "SOL", side: "stake", quantity: 0.42, total_usd: 0, fee_usd: 0,
+    quote_currency: "USD", quote_amount: null, fx_usd_per_quote: null, note: "epoch 812", created_at: "2026-09-01T00:00:00Z",
+  };
+  const csv = toTemplateCsv([reward]);
+  const res = parseTradesCsv(csv);
+  assert.equal(res.format, "template");
+  if (res.format !== "template") return;
+  const back = res.rows[0].input;
+  assert.ok(back && !res.rows[0].error, res.rows[0].error);
+  assert.equal(back!.side, "stake");
+  close(back!.quantity, 0.42, "quantity");
+  assert.equal(back!.total_usd, 0);
+  assert.equal(back!.fee_usd, 0);
+  // A total in the row is ignored rather than becoming a cost.
+  assert.ok(csv.includes("0.42,,USD,,,,"), `blank money columns, got: ${csv}`);
+  const withTotal = parseTradesCsv(csv.replace("0.42,,USD,,,,", "0.42,99,USD,,99,1,"));
+  if (withTotal.format !== "template") return;
+  assert.equal(withTotal.rows[0].input?.total_usd, 0, "a stray total doesn't give a reward a cost");
+});

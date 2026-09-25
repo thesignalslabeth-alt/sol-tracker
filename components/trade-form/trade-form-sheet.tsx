@@ -28,7 +28,7 @@ export function TradeFormSheet({
       onOpenChange={onOpenChange}
       title={editing ? "Edit trade" : "Add trade"}
       description={
-        editing ? "Changes are re-checked against the whole ledger." : "Log a buy or sell of any coin listed on Binance."
+        editing ? "Changes are re-checked against the whole ledger." : "Log a buy, sell or staking reward for any coin listed on Binance."
       }
     >
       {/* Remount per open/trade so the form resets cleanly. */}

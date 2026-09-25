@@ -141,10 +141,16 @@ export function ImportSheet({
                   <div className="min-w-0 flex-1">
                     {r.input ? (
                       <p className="tabular-nums">
-                        <span className={cn("font-medium uppercase", r.input.side === "buy" ? "text-gain" : "text-loss")}>
+                        <span
+                          className={cn(
+                            "font-medium uppercase",
+                            r.input.side === "buy" ? "text-gain" : r.input.side === "sell" ? "text-loss" : "text-primary",
+                          )}
+                        >
                           {r.input.side}
                         </span>{" "}
-                        {fmtQty(r.input.quantity, r.input.asset)} for {fmtUsd(r.input.total_usd)}
+                        {fmtQty(r.input.quantity, r.input.asset)}
+                        {r.input.side === "stake" ? " received" : ` for ${fmtUsd(r.input.total_usd)}`}
                         <span className="text-muted-foreground"> · {fmtDate(r.input.date)}</span>
                       </p>
                     ) : (

@@ -40,8 +40,9 @@ re-averaging, oversell and back-dated-sell cases.
 
 Tap **Add trade** (bottom of the screen on mobile, top right on desktop):
 
-1. Pick **Buy** or **Sell**, the asset (search by symbol or name), the date and the currency:
-   USD, SGD, MYR, IDR, THB, PHP, VND, HKD, JPY, KRW, CNY, TWD or INR.
+1. Pick **Buy**, **Sell** or **Staking**, the asset (search by symbol or name), the date
+   and, for a buy or sell, the currency: USD, SGD, MYR, IDR, THB, PHP, VND, HKD, JPY,
+   KRW, CNY, TWD or INR.
 2. Enter the SOL amount and either the **total** or the **price per SOL**, net of fees.
    For sells, **Max** fills the most you can sell on that date.
 3. For non-USD trades, the exchange rate (e.g. 1 USD = 4.08 MYR) is pre-filled from the live
@@ -53,13 +54,33 @@ Each signed-in user has their own ledger: a new user starts empty and can never 
 anyone else's trades. Every add, edit and delete re-checks the whole ledger, so a sell can never end up larger
 than what you held at that date.
 
+The **fee** is entered in the coin you traded (Pionex charges it in SOL) and priced at
+that trade's own fill — its total divided by its quantity — not at today's price, so a
+fee on an old trade stays worth what it was worth then.
+
+## Staking rewards
+
+**Staking** is the third option beside Buy and Sell, for coins that arrive without being
+bought. It asks only for the asset, the date received and the amount: no currency, total,
+exchange rate or fee.
+
+A reward is free coins. It adds to your holdings, deploys no capital, and realizes
+nothing, so your average cost and break-even price both fall — 40 SOL at $72.47 plus a
+2 SOL reward is 42 SOL at $69.02. The gain shows up as unrealized P/L until you sell,
+and rewards can be sold like any other holding. With insights on, the panel says how
+much of each holding came from staking.
+
+Rewards import and export as template CSV rows with `side` of `stake` and the money
+columns left blank. An existing Postgres database needs `npm run db:migrate` once, to
+accept the new side and a zero total.
+
 ## Insights (opt-in)
 
 Off by default, and nothing about it appears on the dashboard until it's switched on
 from the account menu ("Show insights"). When on, a panel lists plain facts worked out
 from that user's own trades: how concentrated the holdings are, how much profit is
-banked versus on paper, cost basis against the live price, fees paid, coins fully sold,
-and whether the ledger has gone a month without an entry.
+banked versus on paper, cost basis against the live price, fees paid, coins earned from
+staking, coins fully sold, and whether the ledger has gone a month without an entry.
 
 Each user sets their own line in Settings (account menu): a multiple between 1.1 and 20,
 default 2. Once a position is worth that multiple or more of the cost still in it, the panel also works out
@@ -84,7 +105,8 @@ You see a preview of every row before anything is saved. Imports are all-or-noth
 The download icon exports all your trades in the template format.
 
 **How cost basis works:** moving average cost. A buy re-averages your cost; a sell
-removes units at the current average and leaves the average unchanged. Each asset has its own average.
+removes units at the current average and leaves the average unchanged; a staking reward
+adds quantity at no cost, which pulls the average down. Each asset has its own average.
 
 ## Clerk setup
 
