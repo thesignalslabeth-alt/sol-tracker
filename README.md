@@ -187,12 +187,41 @@ Vercel's filesystem is read-only, so production uses Postgres:
 5. Before deploying, check `vercel whoami` shows the right team, and that commits are
    authored by the account that's a member of it.
 
+## Mobile app API
+
+The Expo app (iOS, Android and web) in `thesignalslabeth-alt/dev` uses this server as its
+backend, so every device shares one ledger. It calls a small JSON API under `/api/v1`,
+signed in with a Clerk **session token** in `Authorization: Bearer …`; `clerkMiddleware`
+verifies it exactly like the web cookie, so `requireOwner()` and the allowlist apply unchanged.
+The app must use the **same Clerk instance** (same publishable key) as this server.
+
+| Route | Does |
+|---|---|
+| `GET /api/v1/dashboard` | trades, positions, prices, prefs and insights (403 `{ userId }` if not on the allowlist) |
+| `POST /api/v1/trades` | add a trade (same input as the form) |
+| `PATCH /api/v1/trades/:id` · `DELETE /api/v1/trades/:id` | edit / delete |
+| `POST /api/v1/trades/import` | `{ rows }`, the same rows the import sheet sends |
+| `PUT /api/v1/settings` | `{ insights, capitalThreshold }` |
+| `GET /api/export` | the CSV export (works with the token too) |
+
+Errors come back as `{ ok: false, error }` with status 400/401/403. The rules live in
+`lib/ledger.ts`, shared with the server actions, so the web and mobile apps can't drift.
+
+**CORS:** only the Expo app's *web* build needs it. List its origin in `API_CORS_ORIGINS`
+(e.g. `http://localhost:8081`); native apps are unaffected.
+
+**Local testing with a phone:** run `npm run dev:lan` (with Clerk keys set) and point the
+app's `EXPO_PUBLIC_API_URL` at `http://<your-computer's-LAN-IP>:3000`.
+
 ## Layout
 
 ```
 app/page.tsx                 dashboard (server component)
 app/actions.ts               create / update / delete server actions
 app/api/position/route.ts    JSON: { trades, position, price, lastUpdated }
+app/api/v1/                  JSON API for the mobile app (see "Mobile app API")
+lib/ledger.ts                every ledger mutation, shared by actions and /api/v1
+lib/cors.ts                  API_CORS_ORIGINS handling for proxy.ts (+ tests)
 config/allowlist.ts          who may sign in (committed; see "Who can sign in")
 lib/position.ts              pure position math (+ tests)
 lib/insights.ts              opt-in observations about your own ledger (+ tests)
